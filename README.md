@@ -6,7 +6,7 @@ A "Google Flow" inspired workspace for creating cinematic product explainers usi
 - **Project Management:** Create and manage multiple video generation flows.
 - **Asset Tray:** Upload character and product reference images for consistency.
 - **Storyboard:** Sequential scene generation with frame-to-frame continuity.
-- **Veo Integration:** Powered by Google's `veo-3.1-generate-001`.
+- **Veo Integration:** Powered by Google's `veo-3.1-generate-preview`.
 
 ## Tech Stack
 - **Frontend:** React (Vite), Tailwind CSS v4, Lucide Icons.

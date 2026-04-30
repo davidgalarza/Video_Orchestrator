@@ -9,7 +9,7 @@ A "Google Flow" inspired workspace for creating cinematic product explainers. It
 - **Frontend:** React (Vite), Tailwind CSS, Lucide Icons, Axios.
 - **Backend:** FastAPI (Python 3.10+).
 - **Database:** SQLite (SQLAlchemy ORM).
-- **AI Models:** Google Veo 3.1 (`veo-3.1-generate-001`), Vertex AI TTS.
+- **AI Models:** Google Veo 3.1 (`veo-3.1-generate-preview`), Vertex AI TTS.
 - **Processing:** FFmpeg (for stitching and overlays).
 - **Storage:** Google Cloud Storage (GCS) for media assets.
 

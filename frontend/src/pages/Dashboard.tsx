@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getProjects, createProject } from '../api';
+import { getProjects, createProject, deleteProject } from '../api';
 import type { Project } from '../api';
-import { Plus, Folder, Video } from 'lucide-react';
+import { Plus, Folder, Video, Trash2, Sparkles } from 'lucide-react';
+import { useNotification } from '../components/Notification';
 
 export function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [newProjectName, setNewProjectName] = useState('');
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     fetchProjects();
@@ -31,63 +33,98 @@ export function Dashboard() {
       const project = await createProject(newProjectName);
       setProjects([...projects, project]);
       setNewProjectName('');
-    } catch (error) {
+      showNotification(`Flow "${project.name}" created!`, 'success');
+    } catch (error: any) {
       console.error('Failed to create project', error);
+      showNotification(error.message || 'Failed to create flow', 'error');
+    }
+  };
+
+  const handleDeleteProject = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this project?')) return;
+    try {
+      await deleteProject(id);
+      setProjects(projects.filter((p) => p.id !== id));
+      showNotification('Flow deleted', 'info');
+    } catch (error: any) {
+      console.error('Failed to delete project', error);
+      showNotification(error.message || 'Failed to delete flow', 'error');
     }
   };
 
   return (
     <div className="container mx-auto p-8">
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-3xl font-bold">My Flows</h2>
-        <form onSubmit={handleCreateProject} className="flex gap-2">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-4">
+        <div>
+          <h2 className="text-4xl font-black tracking-tighter text-zinc-100 mb-1">My Flows</h2>
+          <p className="text-zinc-500 text-sm font-medium">Powered by Veo 3.1 & Google AI</p>
+        </div>
+        <form onSubmit={handleCreateProject} className="flex gap-3">
           <input
             type="text"
             value={newProjectName}
             onChange={(e) => setNewProjectName(e.target.value)}
-            placeholder="Project name..."
-            className="bg-slate-900 border border-slate-700 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="New flow name..."
+            className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 focus:outline-none focus:ring-1 focus:ring-zinc-700 text-sm min-w-[250px] transition-all"
           />
           <button
             type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-md px-4 py-2 flex items-center gap-2 transition"
+            className="bg-zinc-100 hover:bg-white text-black rounded-xl px-6 py-3 flex items-center gap-2 transition font-bold cursor-pointer text-sm shadow-xl shadow-zinc-950/20"
           >
-            <Plus size={20} />
+            <Plus size={18} />
             Create
           </button>
         </form>
       </div>
 
       {loading ? (
-        <div className="text-center py-20">Loading projects...</div>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-pulse text-zinc-600 font-medium">Loading your universe...</div>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {projects.map((project: any) => (
             <Link
               key={project.id}
               to={`/project/${project.id}`}
-              className="group bg-slate-900 border border-slate-800 rounded-xl p-6 hover:border-slate-600 transition"
+              className="group bg-zinc-900/40 backdrop-blur-md border border-zinc-900 rounded-3xl p-8 hover:border-zinc-700 transition-all duration-500 relative cursor-pointer overflow-hidden shadow-2xl"
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-blue-500/10 rounded-lg text-blue-500 group-hover:bg-blue-500/20 transition">
-                  <Folder size={24} />
+              <div className="flex items-start justify-between mb-6">
+                <div className="p-4 bg-zinc-800 rounded-2xl text-zinc-100 group-hover:bg-zinc-100 group-hover:text-black transition-all duration-500 shadow-lg">
+                  <Folder size={28} />
                 </div>
-                <div className="text-slate-500 text-sm">
-                  {new Date(project.created_at).toLocaleDateString()}
+                <div className="flex flex-col items-end gap-2">
+                   <button
+                    onClick={(e) => handleDeleteProject(e, project.id)}
+                    className="p-2 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition cursor-pointer md:opacity-0 md:group-hover:opacity-100"
+                    title="Delete Project"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
-              <h3 className="text-xl font-semibold mb-2">{project.name}</h3>
-              <div className="flex items-center gap-4 text-slate-400 text-sm">
-                <span className="flex items-center gap-1">
-                  <Video size={16} />
+              <h3 className="text-2xl font-bold mb-4 tracking-tight group-hover:text-zinc-100 transition-colors">{project.name}</h3>
+              <div className="flex items-center gap-4 text-zinc-500 text-xs font-bold uppercase tracking-widest">
+                <span className="flex items-center gap-1.5">
+                  <Video size={14} />
                   {project.scenes.length} Scenes
                 </span>
+                <span className="w-1 h-1 rounded-full bg-zinc-800"></span>
+                <span className="flex items-center gap-1.5">
+                   <Sparkles size={14} />
+                   Veo
+                </span>
               </div>
+              
+              {/* Subtle gradient background on hover */}
+              <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10"></div>
             </Link>
           ))}
           {projects.length === 0 && (
-            <div className="col-span-full text-center py-20 bg-slate-900/50 border border-dashed border-slate-800 rounded-xl text-slate-500">
-              No projects yet. Create one to get started.
+            <div className="col-span-full text-center py-24 bg-zinc-950/20 border-2 border-dashed border-zinc-900 rounded-3xl text-zinc-600 font-medium">
+              Your storyboard is empty. Create your first flow to begin.
             </div>
           )}
         </div>
