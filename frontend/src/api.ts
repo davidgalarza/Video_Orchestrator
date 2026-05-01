@@ -2,9 +2,9 @@ const API_BASE_URL = 'http://localhost:8000';
 
 export interface Asset {
   id: string;
-  project_id: string;
   type: string;
   file_path: string;
+  is_global: boolean;
   public_url?: string;
 }
 
@@ -26,6 +26,14 @@ export interface Project {
   scenes: Scene[];
 }
 
+export interface GlobalSettings {
+  model_id: string;
+  aspect_ratio: string;
+  global_prompt_prefix: string;
+  global_prompt_suffix: string;
+  updated_at: string;
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
   const headers = {
@@ -38,10 +46,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     delete headers['Content-Type'];
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  const response = await fetch(url, { ...options, headers });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -51,55 +56,38 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json();
 }
 
-export const getProjects = async (): Promise<Project[]> => {
-  return request<Project[]>('/projects');
-};
+// Settings
+export const getSettings = () => request<GlobalSettings>('/settings');
+export const updateSettings = (data: Partial<GlobalSettings>) => 
+  request<GlobalSettings>('/settings', { method: 'PATCH', body: JSON.stringify(data) });
 
-export const createProject = async (name: string): Promise<Project> => {
-  return request<Project>('/projects', {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
-};
+// Projects
+export const getProjects = () => request<Project[]>('/projects');
+export const createProject = (name: string) => 
+  request<Project>('/projects', { method: 'POST', body: JSON.stringify({ name }) });
+export const deleteProject = (id: string) => fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE' });
+export const getProject = (id: string) => request<Project>(`/projects/${id}`);
 
-export const deleteProject = async (id: string): Promise<void> => {
-  await fetch(`${API_BASE_URL}/projects/${id}`, { method: 'DELETE' });
-};
-
-export const getProject = async (id: string): Promise<Project> => {
-  return request<Project>(`/projects/${id}`);
-};
-
-export const uploadAsset = async (projectId: string, type: string, file: File): Promise<Asset> => {
+// Assets
+export const getGlobalAssets = () => request<Asset[]>('/assets/global');
+export const uploadGlobalAsset = (type: string, file: File) => {
   const formData = new FormData();
   formData.append('type', type);
   formData.append('file', file);
-  
-  return request<Asset>(`/projects/${projectId}/assets`, {
-    method: 'POST',
-    body: formData,
-  });
+  return request<Asset>('/assets/global', { method: 'POST', body: formData });
 };
+export const linkAssetToProject = (projectId: string, assetId: string) =>
+  request<any>(`/projects/${projectId}/assets/link/${assetId}`, { method: 'POST' });
+export const unlinkAssetFromProject = (projectId: string, assetId: string) =>
+  request<any>(`/projects/${projectId}/assets/unlink/${assetId}`, { method: 'POST' });
 
-export const createScene = async (projectId: string, order: number, prompt: string): Promise<Scene> => {
-  return request<Scene>(`/projects/${projectId}/scenes`, {
-    method: 'POST',
-    body: JSON.stringify({ order, prompt }),
-  });
-};
+// Scenes
+export const createScene = (projectId: string, order: number, prompt: string, firstFrameAssetId?: string) =>
+  request<Scene>(`/projects/${projectId}/scenes`, { method: 'POST', body: JSON.stringify({ order, prompt, first_frame_asset_id: firstFrameAssetId }) });
+export const triggerGeneration = (projectId: string, sceneId: string) =>
+  request<any>(`/projects/${projectId}/scenes/${sceneId}/generate`, { method: 'POST' });
+export const getSceneStatus = (projectId: string, sceneId: string) =>
+  request<Scene>(`/projects/${projectId}/scenes/${sceneId}/status`);
 
-export const triggerGeneration = async (projectId: string, sceneId: string): Promise<{message: string}> => {
-  return request<{message: string}>(`/projects/${projectId}/scenes/${sceneId}/generate`, {
-    method: 'POST',
-  });
-};
-
-export const getSceneStatus = async (projectId: string, sceneId: string): Promise<Scene> => {
-  return request<Scene>(`/projects/${projectId}/scenes/${sceneId}/status`);
-};
-
-export const exportProject = async (projectId: string): Promise<{export_url: string}> => {
-  return request<{export_url: string}>(`/projects/${projectId}/export`, {
-    method: 'POST',
-  });
-};
+export const exportProject = (projectId: string) =>
+  request<{export_url: string}>(`/projects/${projectId}/export`, { method: 'POST' });
