@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getGlobalAssets, uploadGlobalAsset, linkAssetToProject } from '../api';
+import { getGlobalAssets, uploadGlobalAsset, linkAssetToProject, deleteAsset } from '../api';
 import type { Asset } from '../api';
 import { 
   Upload, Plus, Image as ImageIcon, Check, 
   Loader2, Filter, Grid, List as ListIcon,
-  Search, Package
+  Search, Package, Trash2, ExternalLink
 } from 'lucide-react';
 import { useNotification } from '../components/Notification';
 
@@ -33,6 +33,17 @@ export function LibraryView({ activeProjectId }: { activeProjectId: string | nul
     }
   };
 
+  const handleDeleteAsset = async (id: string) => {
+    if (!confirm('Permanently destroy this asset? This will remove it from all flows.')) return;
+    try {
+      await deleteAsset(id);
+      setAssets(assets.filter(a => a.id !== id));
+      showNotification('Asset purged from library', 'info');
+    } catch (err: any) {
+      showNotification(err.message, 'error');
+    }
+  };
+
   const filteredAssets = assets.filter(a => {
     const matchesSearch = a.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          a.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -56,22 +67,6 @@ export function LibraryView({ activeProjectId }: { activeProjectId: string | nul
       showNotification(err.message, 'error');
     } finally {
       setUploading(false);
-    }
-  };
-
-  const handleLinkToProject = async (assetId: string) => {
-    if (!activeProjectId) {
-      showNotification('No active project to link to', 'error');
-      return;
-    }
-    const tid = showNotification('Linking asset...', 'loading');
-    try {
-      await linkAssetToProject(activeProjectId, assetId);
-      hideNotification(tid);
-      showNotification('Linked to current flow', 'success');
-    } catch (err: any) {
-      hideNotification(tid);
-      showNotification(err.message, 'error');
     }
   };
 
@@ -169,20 +164,28 @@ export function LibraryView({ activeProjectId }: { activeProjectId: string | nul
                   <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-md text-[8px] font-black uppercase tracking-tighter text-zinc-300 border border-white/10">
                     {asset.type}
                   </div>
+                  
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                     <button 
+                        onClick={() => handleDeleteAsset(asset.id)}
+                        className="p-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition cursor-pointer"
+                     >
+                        <Trash2 size={14} />
+                     </button>
+                     <a 
+                        href={asset.public_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-2 bg-zinc-900 text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+                     >
+                        <ExternalLink size={14} />
+                     </a>
+                  </div>
                 </div>
                 
-                <div className="space-y-3">
-                   <div className="text-[10px] text-zinc-600 font-bold uppercase truncate">{asset.id.split('-')[0]}...{asset.file_path.split('.').pop()}</div>
-                   
-                   {activeProjectId && (
-                     <button 
-                        onClick={() => handleLinkToProject(asset.id)}
-                        className="w-full py-2 bg-zinc-800 hover:bg-zinc-100 hover:text-black rounded-lg text-[9px] font-black uppercase tracking-widest transition flex items-center justify-center gap-2 cursor-pointer"
-                     >
-                        <Plus size={10} />
-                        Use in Flow
-                     </button>
-                   )}
+                <div className="space-y-1">
+                   <div className="text-[10px] text-zinc-300 font-bold uppercase truncate">{asset.id.split('-')[0]}</div>
+                   <div className="text-[9px] text-zinc-600 font-medium uppercase tracking-widest">{asset.type}</div>
                 </div>
               </div>
             ))}
@@ -200,14 +203,22 @@ export function LibraryView({ activeProjectId }: { activeProjectId: string | nul
                     <div className="text-[9px] text-zinc-600 font-bold truncate w-32">{asset.id}</div>
                   </div>
                 </div>
-                {activeProjectId && (
-                  <button 
-                    onClick={() => handleLinkToProject(asset.id)}
-                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-100 hover:text-black rounded-lg text-[9px] font-black uppercase tracking-widest transition cursor-pointer"
-                  >
-                    Add to project
-                  </button>
-                )}
+                <div className="flex items-center gap-3">
+                   <a 
+                    href={asset.public_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="p-2 text-zinc-600 hover:text-zinc-100 transition cursor-pointer"
+                   >
+                      <ExternalLink size={16} />
+                   </a>
+                   <button 
+                    onClick={() => handleDeleteAsset(asset.id)}
+                    className="p-2 text-zinc-700 hover:text-red-500 transition cursor-pointer"
+                   >
+                      <Trash2 size={16} />
+                   </button>
+                </div>
               </div>
             ))}
           </div>

@@ -69,18 +69,7 @@ export function SettingsView() {
              <h3 className="text-xs font-black uppercase tracking-[0.2em]">Engine Configuration</h3>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-             <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 block">Default Model</label>
-                <select 
-                  value={settings.model_id}
-                  onChange={(e) => setSettings({...settings, model_id: e.target.value})}
-                  className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-3 text-xs font-bold text-zinc-300 focus:outline-none focus:border-zinc-700 transition"
-                >
-                  <option value="veo-3.1-generate-preview">Veo 3.1 Generate Preview (Premium)</option>
-                </select>
-             </div>
-
+          <div className="grid grid-cols-1 gap-8">
              <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 block">Aspect Ratio</label>
                 <div className="flex gap-4">
@@ -90,7 +79,7 @@ export function SettingsView() {
                      className={`flex-grow flex items-center justify-center gap-3 py-3 rounded-xl border transition cursor-pointer ${settings.aspect_ratio === '16:9' ? 'bg-zinc-100 border-zinc-100 text-black shadow-xl shadow-black/20' : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:border-zinc-700'}`}
                    >
                       <Monitor size={16} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Landscape (16:9)</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Cinema (16:9)</span>
                    </button>
                    <button 
                      type="button"
@@ -98,7 +87,7 @@ export function SettingsView() {
                      className={`flex-grow flex items-center justify-center gap-3 py-3 rounded-xl border transition cursor-pointer ${settings.aspect_ratio === '9:16' ? 'bg-zinc-100 border-zinc-100 text-black shadow-xl shadow-black/20' : 'bg-zinc-950 border-zinc-900 text-zinc-500 hover:border-zinc-700'}`}
                    >
                       <Smartphone size={16} />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Portrait (9:16)</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest">Mobile (9:16)</span>
                    </button>
                 </div>
              </div>
@@ -148,7 +137,9 @@ export function SettingsView() {
              </div>
              <div>
                 <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-widest mb-1">PRO TIP</h4>
-                <p className="text-[11px] leading-relaxed text-zinc-500">The Suffix is automatically appended to every scene you generate. Use it to maintain a consistent "Cinematic Look" across all your projects without typing it every time.</p>
+                <p className="text-[11px] leading-relaxed text-zinc-500">
+                  Settings here are **Studio-wide**. Your chosen Aspect Ratio will be applied to both new AI-generated images and video scenes to ensure a unified cinematic layout.
+                </p>
              </div>
           </div>
         </section>

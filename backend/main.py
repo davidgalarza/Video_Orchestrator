@@ -56,9 +56,13 @@ app.add_middleware(
 # Serve local media files
 app.mount("/data", StaticFiles(directory="data"), name="data")
 
+# Directories
+ASSETS_DIR = "data/assets"
+VIDEOS_DIR = "data/videos"
+
 # Create data directories
-os.makedirs("data/assets", exist_ok=True)
-os.makedirs("data/videos", exist_ok=True)
+os.makedirs(ASSETS_DIR, exist_ok=True)
+os.makedirs(VIDEOS_DIR, exist_ok=True)
 os.makedirs("data/exports", exist_ok=True)
 
 async def run_video_generation(project_id: str, scene_id: str, db_session_factory):
@@ -69,7 +73,8 @@ async def run_video_generation(project_id: str, scene_id: str, db_session_factor
             .where(models.Scene.id == scene_id)
             .options(
                 selectinload(models.Scene.project).selectinload(models.Project.assets),
-                selectinload(models.Scene.first_frame_asset)
+                selectinload(models.Scene.first_frame_asset),
+                selectinload(models.Scene.last_frame_asset)
             )
         )
         scene = result.scalar_one_or_none()
@@ -84,23 +89,6 @@ async def run_video_generation(project_id: str, scene_id: str, db_session_factor
         await db.refresh(scene)
 
         try:
-            # Prepare reference images
-            genai_refs = []
-            for asset in scene.project.assets:
-                local_asset_path = asset.file_path.lstrip("/")
-                full_asset_path = os.path.join(os.getcwd(), local_asset_path)
-                
-                if os.path.exists(full_asset_path):
-                    with open(full_asset_path, "rb") as f:
-                        asset_bytes = f.read()
-                    
-                    mime_type = "image/png" if full_asset_path.endswith(".png") else "image/jpeg"
-                    ref_type = "ASSET" if asset.type in ["CHARACTER", "PRODUCT"] else "STYLE"
-                    genai_refs.append(types.VideoGenerationReferenceImage(
-                        image=types.Image(image_bytes=asset_bytes, mime_type=mime_type),
-                        reference_type=ref_type
-                    ))
-
             # Handle Start Frame
             first_frame_image = None
             if scene.first_frame_asset:
@@ -112,13 +100,17 @@ async def run_video_generation(project_id: str, scene_id: str, db_session_factor
                     mime_type = "image/png" if full_path.endswith(".png") else "image/jpeg"
                     first_frame_image = types.Image(image_bytes=start_bytes, mime_type=mime_type)
 
-            # Merge Global Styling
-            full_prompt = f"{settings.global_prompt_prefix} {scene.prompt} {settings.global_prompt_suffix}".strip()
+            # Handle End Frame Guidance
+            target_guidance = ""
+            if scene.last_frame_asset:
+                target_guidance = " smoothly transitioning to match the composition and visual target of the end reference"
+
+            # Merge Global Styling and End Frame Guidance
+            full_prompt = f"{settings.global_prompt_prefix} {scene.prompt}{target_guidance} {settings.global_prompt_suffix}".strip()
 
             # Generate video
             config = types.GenerateVideosConfig(
-                aspect_ratio=settings.aspect_ratio,
-                reference_images=genai_refs if genai_refs else None
+                aspect_ratio=settings.aspect_ratio
             )
             
             operation = await asyncio.to_thread(
@@ -148,6 +140,13 @@ async def run_video_generation(project_id: str, scene_id: str, db_session_factor
             scene = result.scalar_one()
             scene.video_path = video_url
             scene.status = "completed"
+            await db.commit()
+
+            # Log Usage
+            try:
+                await log_usage("VIDEO", settings.model_id, 5000, 0.10, db_session_factory)
+            except Exception as e:
+                logger.error(f"Failed to log video usage: {e}")
             
         except Exception as e:
             logger.error(f"Generation failed for scene {scene_id}: {e}")
@@ -211,7 +210,10 @@ async def get_project(project_id: str, db: AsyncSession = Depends(database.get_d
     result = await db.execute(
         select(models.Project).where(models.Project.id == project_id).options(
             selectinload(models.Project.assets), 
-            selectinload(models.Project.scenes).selectinload(models.Scene.first_frame_asset)
+            selectinload(models.Project.scenes).options(
+                selectinload(models.Scene.first_frame_asset),
+                selectinload(models.Scene.last_frame_asset)
+            )
         )
     )
     p = result.scalar_one_or_none()
@@ -220,14 +222,92 @@ async def get_project(project_id: str, db: AsyncSession = Depends(database.get_d
     for s in p.scenes: 
         s.public_url = f"{BASE_URL}{s.video_path}" if s.video_path else None
         if s.first_frame_asset: s.first_frame_asset.public_url = f"{BASE_URL}{s.first_frame_asset.file_path}"
+        if s.last_frame_asset: s.last_frame_asset.public_url = f"{BASE_URL}{s.last_frame_asset.file_path}"
     return p
 
 @app.get("/assets/global", response_model=List[schemas.Asset])
 async def get_global_assets(db: AsyncSession = Depends(database.get_db)):
-    result = await db.execute(select(models.Asset).where(models.Asset.is_global == True))
+    result = await db.execute(select(models.Asset).where(models.Asset.is_global == 1))
     assets = result.scalars().all()
     for a in assets: a.public_url = f"{BASE_URL}{a.file_path}"
     return assets
+
+@app.post("/assets/generate", response_model=schemas.ImageGenerationResponse)
+async def generate_assets(req: schemas.ImageGenerationRequest, db: AsyncSession = Depends(database.get_db)):
+    try:
+        # Get global settings for aspect ratio
+        res = await db.execute(select(models.GlobalSettings).where(models.GlobalSettings.id == 1))
+        settings = res.scalar_one_or_none()
+        layout_hint = f" Aspect ratio: {settings.aspect_ratio}." if settings else ""
+        
+        new_assets = []
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model='gemini-3.1-flash-image-preview',
+            contents=[f"{req.prompt}{layout_hint}"]
+        )
+        
+        for part in response.parts:
+            if part.inline_data:
+                    asset_id = str(uuid.uuid4())
+                    filename = f"gen_{asset_id}.png"
+                    filepath = os.path.join(ASSETS_DIR, filename)
+                    
+                    # Use the part.as_image() utility or save bytes
+                    img = part.as_image()
+                    img.save(filepath)
+                    
+                    db_asset = models.Asset(
+                        id=asset_id,
+                        type="STYLE", 
+                        file_path=f"/data/assets/{filename}",
+                        is_global=True
+                    )
+                    db.add(db_asset)
+                    new_assets.append(db_asset)
+            
+        await db.commit()
+        
+        # Log Usage
+        try:
+            tokens = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else 1000
+            await log_usage("IMAGE", "gemini-3.1-flash-image-preview", tokens, 0.01, database.SessionLocal)
+        except: pass
+
+        for a in new_assets:
+            a.public_url = f"{BASE_URL}{a.file_path}"
+        return {"assets": new_assets}
+    except Exception as e:
+        logger.error(f"Gemini image generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def log_usage(type: str, model_id: str, tokens: int, cost: float, db_factory):
+    async with db_factory() as db:
+        log = models.UsageLog(
+            type=type,
+            model_id=model_id,
+            total_tokens=tokens,
+            estimated_cost=cost
+        )
+        db.add(log)
+        await db.commit()
+
+@app.get("/usage/summary", response_model=schemas.UsageSummary)
+async def get_usage_summary(db: AsyncSession = Depends(database.get_db)):
+    from sqlalchemy import func
+    res = await db.execute(select(
+        func.sum(models.UsageLog.total_tokens),
+        func.sum(models.UsageLog.estimated_cost),
+        func.count(models.UsageLog.id).filter(models.UsageLog.type == 'IMAGE'),
+        func.count(models.UsageLog.id).filter(models.UsageLog.type == 'VIDEO')
+    ))
+    row = res.one()
+    return {
+        "total_tokens": row[0] or 0,
+        "total_cost": row[1] or 0.0,
+        "image_count": row[2] or 0,
+        "video_count": row[3] or 0
+    }
 
 @app.post("/assets/global", response_model=schemas.Asset)
 async def upload_global_asset(type: str = Form(...), file: UploadFile = File(...), db: AsyncSession = Depends(database.get_db)):
@@ -243,6 +323,24 @@ async def upload_global_asset(type: str = Form(...), file: UploadFile = File(...
     await db.refresh(db_asset)
     db_asset.public_url = f"{BASE_URL}{db_asset.file_path}"
     return db_asset
+
+@app.delete("/assets/{asset_id}")
+async def delete_asset(asset_id: str, db: AsyncSession = Depends(database.get_db)):
+    result = await db.execute(select(models.Asset).where(models.Asset.id == asset_id))
+    asset = result.scalar_one_or_none()
+    if not asset: raise HTTPException(status_code=404, detail="Asset not found")
+    
+    # Remove file from disk
+    try:
+        path = asset.file_path.lstrip("/")
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception as e:
+        logger.error(f"Failed to delete file: {e}")
+    
+    await db.delete(asset)
+    await db.commit()
+    return {"message": "Destroyed"}
 
 @app.post("/projects/{project_id}/assets/link/{asset_id}")
 async def link_asset_to_project(project_id: str, asset_id: str, db: AsyncSession = Depends(database.get_db)):
@@ -275,8 +373,18 @@ async def create_scene(project_id: str, scene: schemas.SceneCreate, db: AsyncSes
     db_scene = models.Scene(project_id=project_id, **scene.model_dump())
     db.add(db_scene)
     await db.commit()
-    await db.refresh(db_scene)
-    return db_scene
+    
+    # Reload with selectinload to avoid validation errors
+    result = await db.execute(
+        select(models.Scene).where(models.Scene.id == db_scene.id).options(
+            selectinload(models.Scene.first_frame_asset),
+            selectinload(models.Scene.last_frame_asset)
+        )
+    )
+    s = result.scalar_one()
+    if s.first_frame_asset: s.first_frame_asset.public_url = f"{BASE_URL}{s.first_frame_asset.file_path}"
+    if s.last_frame_asset: s.last_frame_asset.public_url = f"{BASE_URL}{s.last_frame_asset.file_path}"
+    return s
 
 @app.post("/projects/{project_id}/scenes/{scene_id}/generate")
 async def trigger_generation(project_id: str, scene_id: str, background_tasks: BackgroundTasks):
@@ -285,10 +393,17 @@ async def trigger_generation(project_id: str, scene_id: str, background_tasks: B
 
 @app.get("/projects/{project_id}/scenes/{scene_id}/status", response_model=schemas.Scene)
 async def get_scene_status(project_id: str, scene_id: str, db: AsyncSession = Depends(database.get_db)):
-    result = await db.execute(select(models.Scene).where(models.Scene.id == scene_id))
+    result = await db.execute(
+        select(models.Scene).where(models.Scene.id == scene_id).options(
+            selectinload(models.Scene.first_frame_asset),
+            selectinload(models.Scene.last_frame_asset)
+        )
+    )
     scene = result.scalar_one_or_none()
     if not scene: raise HTTPException(status_code=404, detail="Scene not found")
     scene.public_url = f"{BASE_URL}{scene.video_path}" if scene.video_path else None
+    if scene.first_frame_asset: scene.first_frame_asset.public_url = f"{BASE_URL}{scene.first_frame_asset.file_path}"
+    if scene.last_frame_asset: scene.last_frame_asset.public_url = f"{BASE_URL}{scene.last_frame_asset.file_path}"
     return scene
 
 @app.post("/projects/{project_id}/export")

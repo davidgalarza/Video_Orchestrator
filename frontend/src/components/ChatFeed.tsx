@@ -32,7 +32,7 @@ export function ChatFeed({ projectId, scenes, onRefresh }: ChatFeedProps) {
           </div>
           <h2 className="text-2xl font-bold text-zinc-100 mb-2">Start your story</h2>
           <p className="text-zinc-500 text-sm max-w-sm">
-            Add your first scene below. Veo will maintain style consistency based on your asset tray.
+            Add your first scene below. Flow Intelligence will maintain style consistency based on your asset tray.
           </p>
         </div>
       ) : (

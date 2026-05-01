@@ -1,27 +1,40 @@
 import { useEffect, useState } from 'react';
-import { getProjects, createProject, deleteProject } from '../api';
+import { getProjects, createProject, deleteProject, getUsageSummary } from '../api';
 import type { Project } from '../api';
 import { 
   Folder, Plus, Trash2, Settings, Library, 
   Video, ChevronRight, Menu, X, Sparkles,
-  Command, Terminal, Layers
+  Command, Terminal, Layers, Wand2, BarChart3
 } from 'lucide-react';
 import { ProjectEditor } from '../components/ProjectEditor';
 import { LibraryView } from '../components/LibraryView';
 import { SettingsView } from '../components/SettingsView';
+import { ImageGenView } from './ImageGenView';
+import { UsageView } from './UsageView';
 import { useNotification } from '../components/Notification';
 
 export function Studio() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [view, setView] = useState<'editor' | 'library' | 'settings'>('editor');
+  const [view, setView] = useState<'editor' | 'library' | 'settings' | 'imagegen' | 'usage'>('editor');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [newProjectName, setNewProjectName] = useState('');
+  const [usage, setUsage] = useState({ total_cost: 0 });
   const { showNotification } = useNotification();
 
   useEffect(() => {
     fetchProjects();
+    fetchUsage();
   }, []);
+
+  const fetchUsage = async () => {
+    try {
+      const data = await getUsageSummary();
+      setUsage(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -94,6 +107,20 @@ export function Studio() {
               <span className="text-xs font-bold uppercase tracking-wider">Asset Library</span>
             </button>
             <button 
+              onClick={() => setView('imagegen')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${view === 'imagegen' ? 'bg-zinc-900 text-zinc-100 shadow-sm shadow-black' : 'hover:bg-zinc-900/50 hover:text-zinc-300'}`}
+            >
+              <Wand2 size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Image Studio</span>
+            </button>
+            <button 
+              onClick={() => setView('usage')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${view === 'usage' ? 'bg-zinc-900 text-zinc-100 shadow-sm shadow-black' : 'hover:bg-zinc-900/50 hover:text-zinc-300'}`}
+            >
+              <BarChart3 size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Usage & Billing</span>
+            </button>
+            <button 
               onClick={() => setView('settings')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${view === 'settings' ? 'bg-zinc-900 text-zinc-100 shadow-sm shadow-black' : 'hover:bg-zinc-900/50 hover:text-zinc-300'}`}
             >
@@ -155,9 +182,12 @@ export function Studio() {
 
         {/* Footer info */}
         <div className="p-6 border-t border-zinc-900">
-           <div className="flex items-center gap-2 text-zinc-700">
-              <Sparkles size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Engine: Veo 3.1</span>
+           <div className="flex items-center justify-between text-zinc-700">
+              <div className="flex items-center gap-2">
+                 <Sparkles size={14} />
+                 <span className="text-[10px] font-black uppercase tracking-widest">Orchestration</span>
+              </div>
+              <span className="text-[10px] font-bold text-zinc-500 tracking-tighter">${usage.total_cost.toFixed(2)}</span>
            </div>
         </div>
       </aside>
@@ -177,7 +207,7 @@ export function Studio() {
           {view === 'editor' && activeProjectId && (
             <ProjectEditor 
               projectId={activeProjectId} 
-              onNavigate={(v: 'library' | 'settings') => setView(v)} 
+              onNavigate={(v: 'library' | 'settings' | 'imagegen') => setView(v)} 
             />
           )}
           {view === 'library' && (
@@ -185,6 +215,12 @@ export function Studio() {
           )}
           {view === 'settings' && (
             <SettingsView />
+          )}
+          {view === 'imagegen' && (
+            <ImageGenView />
+          )}
+          {view === 'usage' && (
+            <UsageView />
           )}
           {!activeProjectId && view === 'editor' && (
             <div className="flex flex-col items-center justify-center h-full gap-4">

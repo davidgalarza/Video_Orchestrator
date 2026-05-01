@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Table, Boolean
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Table, Boolean, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -45,11 +45,24 @@ class Scene(Base):
     status = Column(String, default="pending")  # pending, processing, completed, failed
     video_path = Column(String, nullable=True)
     first_frame_asset_id = Column(String, ForeignKey("assets.id"), nullable=True)
+    last_frame_asset_id = Column(String, ForeignKey("assets.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
     project = relationship("Project", back_populates="scenes")
-    first_frame_asset = relationship("Asset")
+    first_frame_asset = relationship("Asset", foreign_keys=[first_frame_asset_id])
+    last_frame_asset = relationship("Asset", foreign_keys=[last_frame_asset_id])
+
+class UsageLog(Base):
+    __tablename__ = "usage_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String)  # IMAGE, VIDEO
+    model_id = Column(String)
+    prompt_tokens = Column(Integer, default=0)
+    candidates_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    estimated_cost = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class GlobalSettings(Base):
     __tablename__ = "global_settings"

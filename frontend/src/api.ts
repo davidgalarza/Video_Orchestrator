@@ -76,14 +76,18 @@ export const uploadGlobalAsset = (type: string, file: File) => {
   formData.append('file', file);
   return request<Asset>('/assets/global', { method: 'POST', body: formData });
 };
+export const generateAssets = (prompt: string, number_of_images: number = 4) =>
+  request<{ assets: Asset[] }>('/assets/generate', { method: 'POST', body: JSON.stringify({ prompt, number_of_images }) });
 export const linkAssetToProject = (projectId: string, assetId: string) =>
   request<any>(`/projects/${projectId}/assets/link/${assetId}`, { method: 'POST' });
 export const unlinkAssetFromProject = (projectId: string, assetId: string) =>
   request<any>(`/projects/${projectId}/assets/unlink/${assetId}`, { method: 'POST' });
+export const deleteAsset = (id: string) =>
+  request<any>(`/assets/${id}`, { method: 'DELETE' });
 
 // Scenes
-export const createScene = (projectId: string, order: number, prompt: string, firstFrameAssetId?: string) =>
-  request<Scene>(`/projects/${projectId}/scenes`, { method: 'POST', body: JSON.stringify({ order, prompt, first_frame_asset_id: firstFrameAssetId }) });
+export const createScene = (projectId: string, order: number, prompt: string, firstFrameAssetId?: string, lastFrameAssetId?: string) =>
+  request<Scene>(`/projects/${projectId}/scenes`, { method: 'POST', body: JSON.stringify({ order, prompt, first_frame_asset_id: firstFrameAssetId, last_frame_asset_id: lastFrameAssetId }) });
 export const triggerGeneration = (projectId: string, sceneId: string) =>
   request<any>(`/projects/${projectId}/scenes/${sceneId}/generate`, { method: 'POST' });
 export const getSceneStatus = (projectId: string, sceneId: string) =>
@@ -91,3 +95,6 @@ export const getSceneStatus = (projectId: string, sceneId: string) =>
 
 export const exportProject = (projectId: string) =>
   request<{export_url: string}>(`/projects/${projectId}/export`, { method: 'POST' });
+
+export const getUsageSummary = () =>
+  request<{ total_tokens: number, total_cost: number, image_count: number, video_count: number }>('/usage/summary');

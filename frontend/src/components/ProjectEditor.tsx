@@ -8,17 +8,20 @@ import {
   Layers, Package, ExternalLink, Plus, X
 } from 'lucide-react';
 import { useNotification } from '../components/Notification';
+import { AssetTray } from './AssetTray';
 
-export function ProjectEditor({ projectId, onNavigate }: { projectId: string, onNavigate: (v: 'library' | 'settings') => void }) {
+export function ProjectEditor({ projectId, onNavigate }: { projectId: string, onNavigate: (v: 'library' | 'settings' | 'imagegen') => void }) {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [trayRefreshKey, setTrayRefreshKey] = useState(0);
   const { showNotification, hideNotification } = useNotification();
 
   const fetchProject = useCallback(async () => {
     try {
       const data = await getProject(projectId);
       setProject(data);
+      setTrayRefreshKey(k => k + 1);
     } catch (err) {
       console.error(err);
     } finally {
@@ -93,30 +96,11 @@ export function ProjectEditor({ projectId, onNavigate }: { projectId: string, on
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Active Assets Quick Preview */}
-          <div className="flex items-center gap-1 mr-4 bg-zinc-950 p-1.5 rounded-2xl border border-zinc-900">
-             <div className="flex -space-x-2">
-                {project.assets.map(a => (
-                  <div key={a.id} className="group/asset relative w-8 h-8 rounded-lg border-2 border-zinc-950 bg-zinc-800 overflow-hidden" title={a.type}>
-                     <img src={a.public_url} alt="" className="w-full h-full object-cover" />
-                     <button 
-                        onClick={() => handleUnlink(a.id)}
-                        className="absolute inset-0 bg-black/60 opacity-0 group-hover/asset:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
-                     >
-                        <X size={12} />
-                     </button>
-                  </div>
-                ))}
-             </div>
-             <button 
-                onClick={() => onNavigate('library')}
-                className="w-8 h-8 rounded-lg border-2 border-dashed border-zinc-800 hover:border-zinc-500 hover:text-zinc-100 flex items-center justify-center transition cursor-pointer ml-1"
-                title="Manage References"
-             >
-                <Plus size={14} />
-             </button>
+          <div className="hidden md:flex flex-col items-end mr-4">
+             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Active References</span>
+             <span className="text-xs font-bold text-zinc-100 italic">{project.assets.length} Assets Linked</span>
           </div>
-
+          
           <div className="w-px h-8 bg-zinc-900"></div>
 
           <button 
@@ -131,6 +115,7 @@ export function ProjectEditor({ projectId, onNavigate }: { projectId: string, on
       </header>
 
       <div className="flex-grow flex flex-col overflow-hidden relative">
+         <AssetTray project={project} onRefresh={fetchProject} refreshKey={trayRefreshKey} />
          <ChatFeed projectId={project.id} scenes={project.scenes} onRefresh={fetchProject} />
          
          <PromptInput 

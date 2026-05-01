@@ -22,6 +22,7 @@ class SceneBase(BaseModel):
     order: int
     prompt: str
     first_frame_asset_id: Optional[str] = None
+    last_frame_asset_id: Optional[str] = None
 
 class SceneCreate(SceneBase):
     pass
@@ -34,6 +35,7 @@ class Scene(SceneBase):
     public_url: Optional[str] = None
     created_at: datetime
     first_frame_asset: Optional[Asset] = None
+    last_frame_asset: Optional[Asset] = None
 
     class Config:
         from_attributes = True
@@ -66,7 +68,28 @@ class GlobalSettingsUpdate(BaseModel):
     global_prompt_suffix: Optional[str] = None
 
 class GlobalSettings(GlobalSettingsBase):
-    updated_at: datetime
+    id: int
 
     class Config:
         from_attributes = True
+
+class UsageLog(BaseModel):
+    id: int
+    type: str
+    total_tokens: int
+    estimated_cost: float
+    created_at: datetime
+    class Config: from_attributes = True
+
+class UsageSummary(BaseModel):
+    total_tokens: int
+    total_cost: float
+    image_count: int
+    video_count: int
+
+class ImageGenerationRequest(BaseModel):
+    prompt: str
+    number_of_images: int = 1
+
+class ImageGenerationResponse(BaseModel):
+    assets: List[Asset]
