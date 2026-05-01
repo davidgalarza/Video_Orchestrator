@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = 'http://192.168.29.47:8000';
 
 export interface Asset {
   id: string;

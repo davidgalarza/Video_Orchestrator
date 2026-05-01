@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Google GenAI Client
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://192.168.29.47:8000"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -89,10 +89,14 @@ async def run_video_generation(project_id: str, scene_id: str, db_session_factor
         await db.refresh(scene)
 
         try:
-            # Handle Start Frame
+            # Handle Start Frame (with fallback to linked assets)
             first_frame_image = None
-            if scene.first_frame_asset:
-                local_path = scene.first_frame_asset.file_path.lstrip("/")
+            anchor_asset = scene.first_frame_asset
+            if not anchor_asset and scene.project.assets:
+                anchor_asset = scene.project.assets[0]
+
+            if anchor_asset:
+                local_path = anchor_asset.file_path.lstrip("/")
                 full_path = os.path.join(os.getcwd(), local_path)
                 if os.path.exists(full_path):
                     with open(full_path, "rb") as f:

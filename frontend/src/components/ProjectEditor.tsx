@@ -5,7 +5,7 @@ import { ChatFeed } from '../components/ChatFeed';
 import { PromptInput } from '../components/PromptInput';
 import { 
   Settings, Share2, Info, Loader2, Sparkles, 
-  Layers, Package, ExternalLink, Plus, X
+  Layers, Package, ExternalLink, Plus, X, Download
 } from 'lucide-react';
 import { useNotification } from '../components/Notification';
 import { AssetTray } from './AssetTray';
@@ -66,6 +66,12 @@ export function ProjectEditor({ projectId, onNavigate }: { projectId: string, on
       await unlinkAssetFromProject(project.id, assetId);
       hideNotification(tid);
       fetchProject();
+    } catch (err: any) {
+      hideNotification(tid);
+      showNotification(err.message, 'error');
+    }
+  };
+
   const handleDownloadLatest = () => {
     if (!project) return;
     const completed = [...project.scenes].filter(s => s.status === 'completed').sort((a, b) => b.order - a.order);
