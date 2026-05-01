@@ -66,64 +66,83 @@ export function ProjectEditor({ projectId, onNavigate }: { projectId: string, on
       await unlinkAssetFromProject(project.id, assetId);
       hideNotification(tid);
       fetchProject();
-    } catch (err: any) {
-      hideNotification(tid);
-      showNotification(err.message, 'error');
+  const handleDownloadLatest = () => {
+    if (!project) return;
+    const completed = [...project.scenes].filter(s => s.status === 'completed').sort((a, b) => b.order - a.order);
+    if (completed.length === 0) {
+      showNotification('No completed videos to download', 'error');
+      return;
+    }
+    const latest = completed[0];
+    if (latest.public_url) {
+      window.open(latest.public_url, '_blank');
     }
   };
 
-  if (loading) {
+  if (loading || !project) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="animate-spin text-zinc-800" size={32} />
+      <div className="flex-grow flex items-center justify-center bg-black">
+         <div className="flex flex-col items-center gap-4">
+            <Loader2 className="animate-spin text-zinc-700" size={40} />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-800 animate-pulse">Initializing Flow</span>
+         </div>
       </div>
     );
   }
 
-  if (!project) return null;
-
   return (
-    <div className="flex flex-col h-full">
-      <header className="px-10 py-6 border-b border-zinc-900 bg-[#09090b]/80 backdrop-blur-xl flex items-center justify-between sticky top-0 z-40">
-        <div>
-          <div className="flex items-center gap-3">
-             <h2 className="text-xl font-black text-zinc-100 tracking-tighter uppercase italic">{project.name}</h2>
-             <div className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[9px] font-black text-zinc-500 uppercase tracking-widest">Live Flow</div>
-          </div>
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mt-1">
-            {project.assets.length} Active References • {project.scenes.length} Scenes
-          </p>
+    <div className="flex-grow flex flex-col bg-black h-full overflow-hidden">
+      {/* Dynamic Header */}
+      <header className="flex items-center justify-between px-10 py-6 border-b border-zinc-900 bg-zinc-950/20 backdrop-blur-xl z-50">
+        <div className="flex items-center gap-6">
+           <div className="flex flex-col">
+              <h1 className="text-xl font-bold tracking-tight text-white mb-1 uppercase italic">{project.name}</h1>
+              <div className="flex items-center gap-3">
+                 <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                   Orchestration Suite
+                 </span>
+                 <span className="text-zinc-800 text-[10px]">/</span>
+                 <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">{project.scenes.length} Sequence Manifests</span>
+              </div>
+           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden md:flex flex-col items-end mr-4">
-             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Active References</span>
-             <span className="text-xs font-bold text-zinc-100 italic">{project.assets.length} Assets Linked</span>
-          </div>
-          
-          <div className="w-px h-8 bg-zinc-900"></div>
-
-          <button 
-            onClick={handleExport}
-            disabled={exporting || project.scenes.length === 0}
-            className="flex items-center gap-2.5 bg-zinc-100 hover:bg-white text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition cursor-pointer disabled:opacity-30 shadow-xl shadow-black/40"
-          >
-            {exporting ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
-            {exporting ? 'Stitching' : 'Export'}
-          </button>
+        <div className="flex items-center gap-3">
+           <button 
+             onClick={handleDownloadLatest}
+             className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition flex items-center gap-2 cursor-pointer border border-zinc-800"
+           >
+             <Download size={12} />
+             Single Clip
+           </button>
+           <button 
+             onClick={handleExport}
+             disabled={exporting}
+             className="bg-zinc-100 hover:bg-white text-black px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+           >
+             {exporting ? <Loader2 className="animate-spin" size={12} /> : <Download size={12} />}
+             Stitch Export
+           </button>
         </div>
       </header>
 
-      <div className="flex-grow flex flex-col overflow-hidden relative">
-         <AssetTray project={project} onRefresh={fetchProject} refreshKey={trayRefreshKey} />
-         <ChatFeed projectId={project.id} scenes={project.scenes} onRefresh={fetchProject} />
-         
-         <PromptInput 
-            projectId={project.id} 
-            nextOrder={project.scenes.length + 1} 
-            onSceneCreated={fetchProject} 
-            availableAssets={project.assets}
-         />
+      <div className="flex-grow flex overflow-hidden">
+         {/* Left Side: Chat & Input */}
+         <div className="flex-grow flex flex-col relative border-r border-zinc-900">
+            <ChatFeed projectId={project.id} scenes={project.scenes} onRefresh={fetchProject} />
+            <PromptInput 
+               projectId={project.id} 
+               nextOrder={project.scenes.length + 1} 
+               onSceneCreated={fetchProject} 
+               availableAssets={project.assets}
+            />
+         </div>
+
+         {/* Right Side: Global Asset Library Sidebar */}
+         <aside className="w-40 flex-shrink-0 bg-zinc-950/50 backdrop-blur-xl">
+            <AssetTray project={project} onRefresh={fetchProject} refreshKey={trayRefreshKey} />
+         </aside>
       </div>
     </div>
   );

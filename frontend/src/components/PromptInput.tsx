@@ -189,9 +189,6 @@ export function PromptInput({ projectId, nextOrder, onSceneCreated, availableAss
           <div className="absolute -inset-0.5 bg-gradient-to-r from-zinc-500 to-zinc-900 rounded-2xl opacity-0 group-focus-within:opacity-10 transition duration-500 -z-10 blur"></div>
         </form>
         
-        <p className="text-[10px] text-zinc-600 text-center mt-3 font-medium tracking-wide uppercase">
-          Maintaining consistency across Scene {nextOrder} • Powered by Flow Intelligence
-        </p>
       </div>
     </div>
   );

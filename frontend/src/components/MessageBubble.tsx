@@ -1,6 +1,6 @@
 import { triggerGeneration } from '../api';
 import type { Scene } from '../api';
-import { Play, Loader2, Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
+import { Play, Loader2, Sparkles, AlertCircle, RefreshCw, Download, Copy } from 'lucide-react';
 import { useState } from 'react';
 import { useNotification } from './Notification';
 
@@ -31,13 +31,25 @@ export function MessageBubble({ scene, projectId, onRefresh }: MessageBubbleProp
     }
   };
 
+  const handleCopyPrompt = () => {
+    navigator.clipboard.writeText(scene.prompt);
+    showNotification('Prompt copied to clipboard', 'success');
+  };
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto px-4 py-6">
       {/* User Message (Prompt) */}
       <div className="flex justify-end w-full animate-in slide-in-from-right-4 duration-300">
-        <div className="max-w-[80%] bg-zinc-100 text-black px-4 py-3 rounded-2xl rounded-tr-none shadow-lg">
+        <div className="group relative max-w-[80%] bg-zinc-100 text-black px-4 py-3 rounded-2xl rounded-tr-none shadow-lg">
           <p className="text-sm font-medium leading-relaxed">{scene.prompt}</p>
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex justify-between items-center">
+            <button 
+              onClick={handleCopyPrompt}
+              className="p-1 rounded-md hover:bg-black/5 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer text-zinc-500"
+              title="Copy Prompt"
+            >
+              <Copy size={12} />
+            </button>
             <span className="text-[10px] opacity-50 font-bold uppercase tracking-tighter">Scene {scene.order}</span>
           </div>
         </div>
@@ -58,6 +70,12 @@ export function MessageBubble({ scene, projectId, onRefresh }: MessageBubbleProp
                 <Sparkles size={14} className="text-yellow-400" />
                 <span className="text-[10px] font-bold text-white uppercase tracking-wider">Generated with Veo 3.1</span>
               </div>
+              <button 
+                onClick={() => window.open(scene.public_url!, '_blank')}
+                className="absolute top-4 right-4 p-2 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-zinc-100 hover:text-black cursor-pointer shadow-xl"
+              >
+                <Download size={16} />
+              </button>
             </div>
           ) : (
             <div className="aspect-video flex flex-col items-center justify-center p-8 bg-zinc-950/40">
