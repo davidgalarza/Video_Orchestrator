@@ -51,8 +51,8 @@ export async function stitchVideos(videoBlobs: Blob[]): Promise<Blob> {
   ]);
   
   // Read output file
-  const data = await ffmpeg.readFile('output.mp4');
-  const outputBlob = new Blob([data], { type: 'video/mp4' });
+  const data = await ffmpeg.readFile('output.mp4') as Uint8Array;
+  const outputBlob = new Blob([data as unknown as BlobPart], { type: 'video/mp4' });
   
   // Cleanup
   for (const file of inputFiles) {
@@ -80,8 +80,8 @@ export async function extractFirstFrame(videoBlob: Blob): Promise<Blob> {
   ]);
   
   // Read frame
-  const data = await ffmpeg.readFile('frame.jpg');
-  const frameBlob = new Blob([data], { type: 'image/jpeg' });
+  const data = await ffmpeg.readFile('frame.jpg') as Uint8Array;
+  const frameBlob = new Blob([data as unknown as BlobPart], { type: 'image/jpeg' });
   
   // Cleanup
   await ffmpeg.deleteFile('input.mp4');
@@ -113,8 +113,8 @@ export async function extractLastFrame(videoBlob: Blob): Promise<Blob> {
   ]);
   
   // Read frame
-  const data = await ffmpeg.readFile('frame.jpg');
-  const frameBlob = new Blob([data], { type: 'image/jpeg' });
+  const data = await ffmpeg.readFile('frame.jpg') as Uint8Array;
+  const frameBlob = new Blob([data as unknown as BlobPart], { type: 'image/jpeg' });
   
   // Cleanup
   await ffmpeg.deleteFile('input.mp4');

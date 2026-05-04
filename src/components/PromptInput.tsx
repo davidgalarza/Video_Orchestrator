@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Loader2, Image as ImageIcon, X, Video, Wand2 } from 'lucide-react';
+import { Send, Loader2, X, Video, Wand2 } from 'lucide-react';
 import { createScene, generateAssets } from '../api';
 import type { Asset } from '../api';
 import { useNotification } from './Notification';

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getGlobalAssets, linkAssetToProject, unlinkAssetFromProject } from '../api';
 import type { Asset, Project } from '../api';
-import { Plus, X, Package, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Plus, X, Package, Image as ImageIcon } from 'lucide-react';
 import { useNotification } from './Notification';
 
 interface AssetTrayProps {

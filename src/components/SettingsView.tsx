@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getSettings, updateSettings, type GlobalSettings } from '../api';
 import { 
   Settings as SettingsIcon, Save, Loader2, 
@@ -6,7 +6,7 @@ import {
   Quote, Type, Key, Eye, EyeOff, Check, AlertTriangle
 } from 'lucide-react';
 import { useNotification } from '../components/Notification';
-import { getApiKey, setApiKey, hasApiKey } from '../store/settings';
+import { getApiKey, setApiKey } from '../store/settings';
 
 export function SettingsView() {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
@@ -17,17 +17,7 @@ export function SettingsView() {
   const [keyValid, setKeyValid] = useState<boolean | null>(null);
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    fetchSettings();
-    // Load existing API key (masked)
-    const existingKey = getApiKey();
-    if (existingKey) {
-      setApiKeyState(existingKey);
-      setKeyValid(true);
-    }
-  }, []);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     try {
       const data = getSettings();
       setSettings(data);
@@ -36,7 +26,17 @@ export function SettingsView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+    // Load existing API key (masked)
+    const existingKey = getApiKey();
+    if (existingKey) {
+      setApiKeyState(existingKey);
+      setKeyValid(true);
+    }
+  }, [fetchSettings]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,8 +45,9 @@ export function SettingsView() {
     try {
       updateSettings(settings);
       showNotification('Global settings saved', 'success');
-    } catch (err: any) {
-      showNotification(err.message, 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Save failed';
+      showNotification(message, 'error');
     } finally {
       setSaving(false);
     }
@@ -81,9 +82,50 @@ export function SettingsView() {
       
       setKeyValid(true);
       showNotification('API key is valid!', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setKeyValid(false);
-      showNotification(`API key test failed: ${err.message}`, 'error');
+      
+      // Dynamic error message extraction
+      let message = 'Test failed';
+      
+      if (err instanceof Error) {
+        message = err.message;
+        
+        // Try to parse JSON error messages from API
+        try {
+          // Check if the message contains JSON
+          const jsonMatch = message.match(/\{.*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            // Extract meaningful error details
+            message = parsed.error?.message || 
+                      parsed.message || 
+                      parsed.error?.details?.[0]?.message ||
+                      message;
+          }
+        } catch {
+          // Not JSON, use original message
+        }
+        
+        // Map common API errors to user-friendly messages
+        if (message.includes('API key not valid')) {
+          message = 'Invalid API key. Please check your Google API key.';
+        } else if (message.includes('quota')) {
+          message = 'API quota exceeded. Check your Google Cloud billing.';
+        } else if (message.includes('403') || message.includes('permission')) {
+          message = 'Access denied. Ensure Generative Language API is enabled.';
+        } else if (message.includes('404')) {
+          message = 'API endpoint not found. Check your API key configuration.';
+        } else if (message.includes('429')) {
+          message = 'Too many requests. Please try again later.';
+        } else if (message.includes('500') || message.includes('internal')) {
+          message = 'Google API service error. Please try again later.';
+        } else if (message.includes('network') || message.includes('fetch')) {
+          message = 'Network error. Check your internet connection.';
+        }
+      }
+      
+      showNotification(`API key test failed: ${message}`, 'error');
     }
   };
 

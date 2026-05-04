@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getUsageSummary } from '../api';
 import { 
-  BarChart3, TrendingUp, Zap, Image as ImageIcon, 
-  Video, DollarSign, Activity, Calendar,
+  BarChart3, Zap, Image as ImageIcon, 
+  Video, DollarSign, Activity,
   ArrowUpRight, Target
 } from 'lucide-react';
 
@@ -13,13 +13,9 @@ export function UsageView() {
     image_count: 0,
     video_count: 0
   });
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchUsage();
-  }, []);
-
-  const fetchUsage = async () => {
+  const fetchUsage = useCallback(async () => {
     try {
       const data = await getUsageSummary();
       setSummary(data);
@@ -28,7 +24,11 @@ export function UsageView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchUsage();
+  }, [fetchUsage]);
 
   const stats = [
     { 
@@ -68,7 +68,7 @@ export function UsageView() {
         <div className="max-w-6xl mx-auto space-y-12">
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {stats.map((stat, i) => (
+            {stats.map((stat) => (
               <div 
                 key={stat.label} 
                 className="bg-zinc-900/40 border border-zinc-900 rounded-3xl p-8 flex flex-col gap-6 shadow-2xl relative overflow-hidden group hover:border-zinc-700 transition duration-500"

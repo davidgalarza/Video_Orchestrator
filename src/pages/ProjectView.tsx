@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getProject, exportProject } from '../api';
-import type { Project, Asset } from '../api';
+import type { Project } from '../api';
 import { AssetTray } from '../components/AssetTray';
 import { ChatFeed } from '../components/ChatFeed';
 import { PromptInput } from '../components/PromptInput';
@@ -38,15 +38,6 @@ export function ProjectView() {
       return () => clearInterval(interval);
     }
   }, [project?.scenes, fetchProject]);
-
-  const handleAssetUploaded = (newAsset: Asset) => {
-    if (project) {
-      setProject({
-        ...project,
-        assets: [...project.assets, newAsset]
-      });
-    }
-  };
 
   const { showNotification, hideNotification } = useNotification();
   const [exporting, setExporting] = useState(false);
@@ -93,9 +84,8 @@ export function ProjectView() {
   return (
     <div className="flex h-screen bg-black overflow-hidden selection:bg-zinc-100 selection:text-black">
       <AssetTray 
-        projectId={project.id} 
-        assets={project.assets} 
-        onAssetUploaded={handleAssetUploaded} 
+        project={project} 
+        onRefresh={fetchProject} 
       />
 
       <div className="flex-grow flex flex-col relative h-full">
@@ -146,6 +136,7 @@ export function ProjectView() {
           projectId={project.id} 
           nextOrder={project.scenes.length + 1} 
           onSceneCreated={fetchProject} 
+          availableAssets={project.assets}
         />
       </div>
     </div>

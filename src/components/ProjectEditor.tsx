@@ -1,16 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getProject, exportProject, unlinkAssetFromProject } from '../api';
-import type { Project, Asset } from '../api';
+import { getProject, exportProject } from '../api';
+import type { Project } from '../api';
 import { ChatFeed } from '../components/ChatFeed';
 import { PromptInput } from '../components/PromptInput';
-import { 
-  Settings, Share2, Info, Loader2, Sparkles, 
-  Layers, Package, ExternalLink, Plus, X, Download
-} from 'lucide-react';
+import { Loader2, Download } from 'lucide-react';
 import { useNotification } from '../components/Notification';
 import { AssetTray } from './AssetTray';
 
-export function ProjectEditor({ projectId, onNavigate }: { projectId: string, onNavigate: (v: 'library' | 'settings' | 'imagegen') => void }) {
+export function ProjectEditor({ projectId, onNavigate: _onNavigate }: { projectId: string, onNavigate: (v: 'library' | 'settings' | 'imagegen') => void }) {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -51,26 +48,15 @@ export function ProjectEditor({ projectId, onNavigate }: { projectId: string, on
       hideNotification(toastId);
       showNotification('Master video ready!', 'success');
       window.open(export_url, '_blank');
-    } catch (err: any) {
+    } catch (err: unknown) {
       hideNotification(toastId);
-      showNotification(err.message, 'error');
+      const message = err instanceof Error ? err.message : 'Export failed';
+      showNotification(message, 'error');
     } finally {
       setExporting(false);
     }
   };
 
-  const handleUnlink = async (assetId: string) => {
-    if (!project) return;
-    const tid = showNotification('Removing reference...', 'loading');
-    try {
-      await unlinkAssetFromProject(project.id, assetId);
-      hideNotification(tid);
-      fetchProject();
-    } catch (err: any) {
-      hideNotification(tid);
-      showNotification(err.message, 'error');
-    }
-  };
 
   const handleDownloadLatest = () => {
     if (!project) return;

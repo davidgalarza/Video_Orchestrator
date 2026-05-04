@@ -1,14 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getGlobalAssets, uploadGlobalAsset, linkAssetToProject, deleteAsset } from '../api';
+import { getGlobalAssets, uploadGlobalAsset, deleteAsset } from '../api';
 import type { Asset } from '../api';
-import { 
-  Upload, Plus, Image as ImageIcon, Check, 
-  Loader2, Filter, Grid, List as ListIcon,
-  Search, Package, Trash2, ExternalLink
-} from 'lucide-react';
+import { Upload, Image as ImageIcon, Trash2, Search, Package, ExternalLink, Loader2, Grid3X3 as Grid, List as ListIcon, Filter } from 'lucide-react';
 import { useNotification } from '../components/Notification';
 
-export function LibraryView({ activeProjectId }: { activeProjectId: string | null }) {
+export function LibraryView({ activeProjectId: _activeProjectId }: { activeProjectId: string | null }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);

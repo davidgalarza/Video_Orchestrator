@@ -1,4 +1,4 @@
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { openDB, type IDBPDatabase } from 'idb';
 
 export interface Project {
   id: string;
@@ -39,35 +39,15 @@ export interface UsageLog {
   created_at: string;
 }
 
-interface VidGenDB extends DBSchema {
-  projects: {
-    key: string;
-    value: Project;
-  };
-  assets: {
-    key: string;
-    value: Asset;
-  };
-  scenes: {
-    key: string;
-    value: Scene;
-    indexes: { 'by-project': string };
-  };
-  usage_logs: {
-    key: string;
-    value: UsageLog;
-  };
-}
-
 const DB_NAME = 'vid-gen-studio';
 const DB_VERSION = 1;
 
-let db: IDBPDatabase<VidGenDB> | null = null;
+let db: IDBPDatabase | null = null;
 
-export async function initDB(): Promise<IDBPDatabase<VidGenDB>> {
+export async function initDB(): Promise<IDBPDatabase> {
   if (db) return db;
   
-  db = await openDB<VidGenDB>(DB_NAME, DB_VERSION, {
+  db = await openDB(DB_NAME, DB_VERSION, {
     upgrade(db) {
       if (!db.objectStoreNames.contains('projects')) {
         db.createObjectStore('projects', { keyPath: 'id' });
@@ -180,7 +160,7 @@ export async function unlinkAssetFromProject(assetId: string, projectId: string)
   const db = await initDB();
   const asset = await db.get('assets', assetId);
   if (asset) {
-    asset.project_ids = asset.project_ids.filter(id => id !== projectId);
+    asset.project_ids = asset.project_ids.filter((id: string) => id !== projectId);
     await db.put('assets', asset);
   }
 }
@@ -293,4 +273,13 @@ export async function getCompletedScenesForExport(projectId: string): Promise<Sc
   return scenes
     .filter(s => s.status === 'completed' && s.video_blob)
     .sort((a, b) => a.order - b.order);
+}
+
+// Get all scenes with videos for video library
+export async function getAllScenesWithVideos(): Promise<Scene[]> {
+  const db = await initDB();
+  const scenes = await db.getAll('scenes');
+  return scenes
+    .filter(s => s.video_blob && s.status === 'completed')
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }

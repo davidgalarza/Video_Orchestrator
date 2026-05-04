@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getProjects, createProject, deleteProject } from '../api';
 import type { Project } from '../api';
@@ -11,11 +11,7 @@ export function Dashboard() {
   const [newProjectName, setNewProjectName] = useState('');
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const data = await getProjects();
       setProjects(data);
@@ -24,7 +20,11 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,9 +34,10 @@ export function Dashboard() {
       setProjects([...projects, project]);
       setNewProjectName('');
       showNotification(`Flow "${project.name}" created!`, 'success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create project', error);
-      showNotification(error.message || 'Failed to create flow', 'error');
+      const message = error instanceof Error ? error.message : 'Failed to create flow';
+      showNotification(message, 'error');
     }
   };
 
@@ -48,9 +49,10 @@ export function Dashboard() {
       await deleteProject(id);
       setProjects(projects.filter((p) => p.id !== id));
       showNotification('Flow deleted', 'info');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete project', error);
-      showNotification(error.message || 'Failed to delete flow', 'error');
+      const message = error instanceof Error ? error.message : 'Failed to delete flow';
+      showNotification(message, 'error');
     }
   };
 

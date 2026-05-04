@@ -7,58 +7,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Nothing yet
+
+## [1.0.0] - 2026-05-04
+
 ### Added
-- Browser-native architecture - runs entirely in the browser
-- IndexedDB storage for projects, scenes, and assets
-- Direct Google GenAI SDK integration (@google/genai)
-- ffmpeg.wasm for in-browser video stitching
-- API key management in Settings (stored in localStorage)
-- Video generation progress tracking
-- Image generation with Gemini
-- Project export with video concatenation
+
+#### Core Architecture
+- Browser-native application - runs entirely in the browser without backend
+- IndexedDB storage layer via `idb` library for projects, scenes, and assets
+- localStorage for user settings and API key management
+- Direct Google GenAI SDK (`@google/genai`) integration for API calls
+
+#### Video Features
+- Video generation using Google Veo 3.1 (`veo-3.1-generate-preview`)
+- Frame-to-frame continuity with first frame image support
+- In-browser video stitching via ffmpeg.wasm (`@ffmpeg/ffmpeg`, `@ffmpeg/util`)
+- Video export with scene concatenation
+- Real-time generation progress tracking
+
+#### Image Features
+- AI image generation using Gemini (`gemini-3.1-flash-image-preview`)
+- Asset upload and management (Character, Product, Style types)
+- Project asset linking/unlinking
+
+#### UI/UX
+- React 19 + TypeScript 5 + Vite build system
+- Tailwind CSS v4 with dark theme
+- Responsive sidebar navigation
+- Project dashboard with "Active Flows" management
+- Scene-based storyboard interface
+- Asset library with upload and generation
+- Settings panel with API key configuration and testing
+- Usage tracking dashboard (tokens, cost estimation)
+- Notification system for user feedback
+
+#### Documentation
+- MIT License (Copyright 2026 Rajjit Laishram)
+- Comprehensive README with setup instructions
+- Contributing guidelines
+- This changelog
+
+### Dependencies
+
+#### Production
+- `@ffmpeg/ffmpeg@^0.12.15` - WebAssembly video processing
+- `@ffmpeg/util@^0.12.2` - FFmpeg utilities
+- `@google/genai@^0.8.0` - Google AI SDK
+- `@tailwindcss/vite@^4.2.4` - Tailwind Vite plugin
+- `axios@^1.15.2` - HTTP client (for API fallback)
+- `idb@^8.0.2` - IndexedDB wrapper
+- `lucide-react@^0.468.0` - Icon library
+- `react@^19.2.5` - UI library
+- `react-dom@^19.2.5` - React DOM
+- `react-router-dom@^7.14.2` - Routing
+- `tailwindcss@^4.2.4` - CSS framework
+
+#### Development
+- `@eslint/js@^10.0.1` - ESLint core
+- `@types/node@^24.12.2` - Node.js types
+- `@types/react@^19.2.14` - React types
+- `@types/react-dom@^19.2.3` - React DOM types
+- `@vitejs/plugin-react@^6.0.1` - Vite React plugin
+- `eslint@^10.2.1` - Linter
+- `eslint-plugin-react-hooks@^7.1.1` - React Hooks lint rules
+- `eslint-plugin-react-refresh@^0.5.2` - React Refresh lint rules
+- `globals@^17.5.0` - Global variables
+- `typescript@~6.0.2` - TypeScript compiler
+- `typescript-eslint@^8.58.2` - TypeScript ESLint
+- `vite@^8.0.10` - Build tool
 
 ### Changed
-- Migrated from Python/FastAPI backend to pure browser-based app
-- Moved all source code from `frontend/` to root directory
+- Migrated from Python/FastAPI backend to pure browser-based application
+- Moved all source code from `frontend/` directory to project root
 - Updated all documentation for new architecture
+- Replaced server-side SQLite with client-side IndexedDB
+- Replaced Python FFmpeg with ffmpeg.wasm
 
 ### Removed
-- Python backend (FastAPI, SQLAlchemy, SQLite)
+- Python backend (FastAPI, SQLAlchemy, SQLite, python-multipart)
+- Server-side video processing pipeline
+- Environment file configuration (`.env`, `.env.example`)
+- Google Cloud Storage dependency
+- Backend `data/` directory and file storage
+- `backend/` directory entirely
+- `Plan.md` (old Python architecture documentation)
+- `MIGRATION.md` (temporary migration guide)
+
+---
+
+## Pre-1.0 History
+
+### Python Backend Era (Archived)
+
+The project originally used a Python/FastAPI backend with:
+- FastAPI + SQLAlchemy + SQLite
 - Server-side video processing
-- Environment file configuration (.env)
-- GCS bucket dependency
+- Google Cloud Storage for assets
+- Python FFmpeg for video stitching
 
-## [1.0.0] - 2024-XX-XX
-
-### Added
-- Initial browser-native release
-- React + TypeScript + Vite frontend
-- Tailwind CSS v4 styling
-- Project management (create, delete, list)
-- Asset management (upload, generate, link/unlink)
-- Scene creation with prompt input
-- Video generation via Google Veo 3.1
-- Frame-to-frame continuity with first frame images
-- Video preview and download
-- Usage tracking (tokens, cost estimation)
-- Dark theme UI
-- Responsive sidebar navigation
-- MIT License
-
-## Migration Notes
-
-### From Backend Version
-
-If you were using the previous Python backend version:
-
-1. **Data**: Your old SQLite database and files in `data/` are no longer used
-2. **API Key**: Previously configured in `.env`, now enter in Settings UI
-3. **Architecture**: No server needed - everything runs in browser
-
-To start fresh:
-```bash
-npm install
-npm run dev
-```
-
-Then add your Google API key in the Settings page.
+This architecture was completely replaced in v1.0.0 with the current browser-native approach.

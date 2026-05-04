@@ -1,42 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { getProjects, createProject, deleteProject, getUsageSummary } from '../api';
 import type { Project } from '../api';
 import { 
   Folder, Plus, Trash2, Settings, Library, 
-  Video, ChevronRight, Menu, X, Sparkles,
-  Command, Terminal, Layers, Wand2, BarChart3
+  Menu, X, Sparkles,
+  Command, Terminal, Wand2, BarChart3, Video
 } from 'lucide-react';
 import { ProjectEditor } from '../components/ProjectEditor';
 import { LibraryView } from '../components/LibraryView';
 import { SettingsView } from '../components/SettingsView';
 import { ImageGenView } from './ImageGenView';
 import { UsageView } from './UsageView';
+import { VideoLibraryView } from './VideoLibraryView';
 import { useNotification } from '../components/Notification';
 
 export function Studio() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [view, setView] = useState<'editor' | 'library' | 'settings' | 'imagegen' | 'usage'>('editor');
+  const [view, setView] = useState<'editor' | 'library' | 'settings' | 'imagegen' | 'usage' | 'videos'>('editor');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [newProjectName, setNewProjectName] = useState('');
   const [usage, setUsage] = useState({ total_cost: 0 });
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    fetchProjects();
-    fetchUsage();
-  }, []);
-
-  const fetchUsage = async () => {
+  const fetchUsage = useCallback(async () => {
     try {
       const data = await getUsageSummary();
       setUsage(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const data = await getProjects();
       setProjects(data);
@@ -46,7 +42,12 @@ export function Studio() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    fetchProjects();
+    fetchUsage();
+  }, [fetchProjects, fetchUsage]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,8 +59,9 @@ export function Studio() {
       setNewProjectName('');
       setView('editor');
       showNotification(`Created flow: ${p.name}`, 'success');
-    } catch (err: any) {
-      showNotification(err.message, 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create project';
+      showNotification(message, 'error');
     }
   };
 
@@ -70,8 +72,9 @@ export function Studio() {
       setProjects(projects.filter(p => p.id !== id));
       if (activeProjectId === id) setActiveProjectId(projects[0]?.id || null);
       showNotification('Flow deleted', 'info');
-    } catch (err: any) {
-      showNotification(err.message, 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete project';
+      showNotification(message, 'error');
     }
   };
 
@@ -105,6 +108,13 @@ export function Studio() {
             >
               <Library size={16} />
               <span className="text-xs font-bold uppercase tracking-wider">Asset Library</span>
+            </button>
+            <button 
+              onClick={() => setView('videos')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${view === 'videos' ? 'bg-zinc-900 text-zinc-100 shadow-sm shadow-black' : 'hover:bg-zinc-900/50 hover:text-zinc-300'}`}
+            >
+              <Video size={16} />
+              <span className="text-xs font-bold uppercase tracking-wider">Video Library</span>
             </button>
             <button 
               onClick={() => setView('imagegen')}
@@ -221,6 +231,9 @@ export function Studio() {
           )}
           {view === 'usage' && (
             <UsageView />
+          )}
+          {view === 'videos' && (
+            <VideoLibraryView />
           )}
           {!activeProjectId && view === 'editor' && (
             <div className="flex flex-col items-center justify-center h-full gap-4">

@@ -1,8 +1,11 @@
 {
-  "name": "frontend",
+  "name": "vid-gen-studio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "description": "Browser-native video generation studio using Google Veo",
+  "author": "Rajjit Laishram",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,9 +13,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@google/genai": "^0.8.0",
     "@tailwindcss/vite": "^4.2.4",
     "axios": "^1.15.2",
-    "lucide-react": "^1.11.0",
+    "idb": "^8.0.3",
+    "lucide-react": "^0.468.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^7.14.2",
@@ -31,5 +38,14 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10"
-  }
+  },
+  "keywords": [
+    "video-generation",
+    "google-veo",
+    "ai",
+    "browser",
+    "react",
+    "ffmpeg",
+    "indexeddb"
+  ]
 }

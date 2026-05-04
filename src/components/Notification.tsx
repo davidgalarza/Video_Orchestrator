@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import { useState, createContext, useContext, type ReactNode } from 'react';
 import { X, CheckCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
 
 type NotificationType = 'success' | 'error' | 'info' | 'loading';
@@ -16,8 +16,12 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
+interface NotificationWithState extends Notification {
+  exiting?: boolean;
+}
+
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<NotificationWithState[]>([]);
 
   const showNotification = (message: string, type: NotificationType) => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -25,12 +29,28 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     
     if (type !== 'loading') {
       setTimeout(() => hideNotification(id), 5000);
+    } else {
+      // Loading notifications get a max 30s safety timeout in case hideNotification isn't called
+      setTimeout(() => {
+        hideNotification(id);
+      }, 30000);
     }
     return id;
   };
 
   const hideNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    setNotifications((prev) => {
+      const notification = prev.find((n) => n.id === id);
+      if (!notification || notification.exiting) return prev;
+      
+      // Mark as exiting for animation
+      return prev.map((n) => n.id === id ? { ...n, exiting: true } : n);
+    });
+    
+    // Actually remove after animation
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 300);
   };
 
   return (
@@ -42,7 +62,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             key={n.id}
             className={`
               pointer-events-auto flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl border backdrop-blur-2xl
-              animate-in slide-in-from-right-8 duration-300
+              ${n.exiting 
+                ? 'animate-out slide-out-to-right-8 duration-300 opacity-0' 
+                : 'animate-in slide-in-from-right-8 duration-300'
+              }
               ${n.type === 'success' ? 'bg-zinc-900/90 border-green-500/20 text-green-400' : ''}
               ${n.type === 'error' ? 'bg-zinc-900/90 border-red-500/20 text-red-400' : ''}
               ${n.type === 'info' ? 'bg-zinc-900/90 border-zinc-700 text-zinc-300' : ''}

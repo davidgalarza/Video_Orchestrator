@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { generateAssets, getGlobalAssets, deleteAsset } from '../api';
 import type { Asset } from '../api';
 import { 
   Sparkles, Loader2, Wand2, Grid, 
-  Download, Plus, Check, ImageIcon,
   Trash2, ExternalLink
 } from 'lucide-react';
 import { useNotification } from '../components/Notification';
@@ -15,18 +14,18 @@ export function ImageGenView() {
   const [history, setHistory] = useState<Asset[]>([]);
   const { showNotification } = useNotification();
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     try {
       const assets = await getGlobalAssets();
       setHistory(assets.filter((a: Asset) => a.file_path.includes('gen_')).reverse());
     } catch (err) {
       console.error('Failed to fetch history:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +38,9 @@ export function ImageGenView() {
       setHistory(prev => [...assets, ...prev]);
       showNotification('Vision manifested', 'success');
       setPrompt('');
-    } catch (err: any) {
-      showNotification(err.message, 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Generation failed';
+      showNotification(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -53,8 +53,9 @@ export function ImageGenView() {
       setHistory(prev => prev.filter(a => a.id !== id));
       setResults(prev => prev.filter(a => a.id !== id));
       showNotification('Asset destroyed', 'info');
-    } catch (err: any) {
-      showNotification(err.message, 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Delete failed';
+      showNotification(message, 'error');
     }
   };
 

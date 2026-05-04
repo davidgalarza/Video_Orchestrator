@@ -1,7 +1,7 @@
-import { triggerGeneration } from '../api';
+import { triggerGeneration, stopGeneration } from '../api';
 import type { Scene } from '../api';
-import { Play, Loader2, Sparkles, AlertCircle, RefreshCw, Download, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { Play, Loader2, Sparkles, AlertCircle, RefreshCw, Download, Copy, Square } from 'lucide-react';
+import { useState, useRef } from 'react';
 import { useNotification } from './Notification';
 
 interface MessageBubbleProps {
@@ -13,26 +13,41 @@ interface MessageBubbleProps {
 export function MessageBubble({ scene, projectId, onRefresh }: MessageBubbleProps) {
   const { showNotification, hideNotification } = useNotification();
   const [isGenerating, setIsGenerating] = useState(false);
-
   const [progressMessage, setProgressMessage] = useState('Initializing...');
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    abortControllerRef.current = new AbortController();
+    
     const toastId = showNotification('Igniting Veo 3.1 engines...', 'loading');
     try {
       await triggerGeneration(projectId, scene.id, (status) => {
         setProgressMessage(status);
-      });
+      }, abortControllerRef.current.signal);
       hideNotification(toastId);
       showNotification('Generation sequence initiated!', 'success');
       onRefresh();
     } catch (error: any) {
       console.error('Generation trigger failed', error);
       hideNotification(toastId);
-      showNotification(error.message || 'Engine failure', 'error');
+      if (error.message?.includes('cancelled')) {
+        showNotification('Generation cancelled', 'info');
+      } else {
+        showNotification(error.message || 'Engine failure', 'error');
+      }
     } finally {
       setIsGenerating(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    stopGeneration();
+    showNotification('Stopping generation...', 'info');
   };
 
   const handleCopyPrompt = () => {
@@ -83,14 +98,21 @@ export function MessageBubble({ scene, projectId, onRefresh }: MessageBubbleProp
             </div>
           ) : (
             <div className="aspect-video flex flex-col items-center justify-center p-8 bg-zinc-950/40">
-              {scene.status === 'processing' ? (
+              {scene.status === 'processing' || isGenerating ? (
                 <>
                   <div className="relative mb-4">
                     <Loader2 className="animate-spin text-zinc-400" size={48} />
                     <Sparkles className="absolute -top-1 -right-1 text-zinc-100 animate-pulse" size={16} />
                   </div>
                   <h4 className="text-zinc-100 font-semibold mb-1">{progressMessage}</h4>
-                  <p className="text-zinc-500 text-xs text-center max-w-[200px]">Veo is generating your cinematic sequence. This usually takes 1-2 minutes.</p>
+                  <p className="text-zinc-500 text-xs text-center max-w-[200px] mb-4">Veo is generating your cinematic sequence. This usually takes 1-2 minutes.</p>
+                  <button
+                    onClick={handleStop}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800 text-zinc-300 text-sm font-bold hover:bg-zinc-700 transition cursor-pointer"
+                  >
+                    <Square size={14} fill="currentColor" />
+                    Stop Generation
+                  </button>
                 </>
               ) : scene.status === 'failed' ? (
                 <>

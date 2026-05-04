@@ -20,7 +20,8 @@ import {
   type Scene as DBScene,
 } from './db';
 import { getSettings as storeGetSettings, saveSettings, type GlobalSettings as StoreSettings } from './store/settings';
-import { generateVideo, generateImage, blobToDataUrl } from './ai';
+import { generateVideo, generateImage, stopGeneration, resetGenerationState, blobToDataUrl } from './ai';
+export { stopGeneration, resetGenerationState };
 import { stitchVideos, downloadBlob } from './ffmpeg';
 
 // Export types for compatibility
@@ -208,10 +209,16 @@ export const createScene = async (
 export const triggerGeneration = async (
   projectId: string, 
   sceneId: string,
-  onProgress?: (status: string) => void
+  onProgress?: (status: string) => void,
+  signal?: AbortSignal
 ): Promise<void> => {
   const scene = await dbGetScene(sceneId);
   if (!scene) throw new Error('Scene not found');
+  
+  // Check if already cancelled before starting
+  if (signal?.aborted) {
+    throw new Error('Generation cancelled by user');
+  }
   
   // Update status to processing
   await updateSceneStatus(sceneId, 'processing');
@@ -228,14 +235,25 @@ export const triggerGeneration = async (
       }
     }
     
+    // Check again after setup
+    if (signal?.aborted) {
+      await updateSceneStatus(sceneId, 'pending');
+      throw new Error('Generation cancelled by user');
+    }
+    
     // Generate video
-    const result = await generateVideo(scene.prompt, firstFrameBlob, onProgress);
+    const result = await generateVideo(scene.prompt, firstFrameBlob, onProgress, signal);
     
     // Save to scene
     await updateSceneStatus(sceneId, 'completed', result.videoBlob);
   } catch (error) {
     console.error('Generation failed:', error);
-    await updateSceneStatus(sceneId, 'failed');
+    // If cancelled, set back to pending so it can be retried
+    if ((error as Error).message?.includes('cancelled')) {
+      await updateSceneStatus(sceneId, 'pending');
+    } else {
+      await updateSceneStatus(sceneId, 'failed');
+    }
     throw error;
   }
 };
