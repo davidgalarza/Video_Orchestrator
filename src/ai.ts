@@ -259,7 +259,11 @@ export async function generateVideo(
       
       if (videoUri) {
         onProgress?.('Downloading video...');
-        const videoResponse = await fetch(videoUri);
+        const apiKey = getApiKey();
+        const downloadUrl = videoUri.includes('?') 
+          ? `${videoUri}&key=${apiKey}` 
+          : `${videoUri}?key=${apiKey}`;
+        const videoResponse = await fetch(downloadUrl);
         const videoBlob = await videoResponse.blob();
         await logUsage('VIDEO', settings.model_id, 5000, 0.10);
         return { videoBlob, mimeType: 'video/mp4' };
