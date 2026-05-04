@@ -36,13 +36,11 @@ export function Studio() {
     try {
       const data = await getProjects();
       setProjects(data);
-      if (data.length > 0 && !activeProjectId) {
-        setActiveProjectId(data[0].id);
-      }
+      // Don't auto-select any project - stay on homepage
     } catch (err) {
       console.error(err);
     }
-  }, [activeProjectId]);
+  }, []);
 
   useEffect(() => {
     fetchProjects();
