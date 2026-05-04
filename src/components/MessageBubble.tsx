@@ -14,11 +14,15 @@ export function MessageBubble({ scene, projectId, onRefresh }: MessageBubbleProp
   const { showNotification, hideNotification } = useNotification();
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const [progressMessage, setProgressMessage] = useState('Initializing...');
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     const toastId = showNotification('Igniting Veo 3.1 engines...', 'loading');
     try {
-      await triggerGeneration(projectId, scene.id);
+      await triggerGeneration(projectId, scene.id, (status) => {
+        setProgressMessage(status);
+      });
       hideNotification(toastId);
       showNotification('Generation sequence initiated!', 'success');
       onRefresh();
@@ -85,7 +89,7 @@ export function MessageBubble({ scene, projectId, onRefresh }: MessageBubbleProp
                     <Loader2 className="animate-spin text-zinc-400" size={48} />
                     <Sparkles className="absolute -top-1 -right-1 text-zinc-100 animate-pulse" size={16} />
                   </div>
-                  <h4 className="text-zinc-100 font-semibold mb-1">Painting your vision...</h4>
+                  <h4 className="text-zinc-100 font-semibold mb-1">{progressMessage}</h4>
                   <p className="text-zinc-500 text-xs text-center max-w-[200px]">Veo is generating your cinematic sequence. This usually takes 1-2 minutes.</p>
                 </>
               ) : scene.status === 'failed' ? (

@@ -1,26 +1,35 @@
 import { useEffect, useState } from 'react';
-import { getSettings, updateSettings } from '../api';
-import type { GlobalSettings } from '../api';
+import { getSettings, updateSettings, type GlobalSettings } from '../api';
 import { 
   Settings as SettingsIcon, Save, Loader2, 
   Monitor, Smartphone, Sparkles, Cpu, 
-  Quote, Type
+  Quote, Type, Key, Eye, EyeOff, Check, AlertTriangle
 } from 'lucide-react';
 import { useNotification } from '../components/Notification';
+import { getApiKey, setApiKey, hasApiKey } from '../store/settings';
 
 export function SettingsView() {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [apiKey, setApiKeyState] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [keyValid, setKeyValid] = useState<boolean | null>(null);
   const { showNotification } = useNotification();
 
   useEffect(() => {
     fetchSettings();
+    // Load existing API key (masked)
+    const existingKey = getApiKey();
+    if (existingKey) {
+      setApiKeyState(existingKey);
+      setKeyValid(true);
+    }
   }, []);
 
   const fetchSettings = async () => {
     try {
-      const data = await getSettings();
+      const data = getSettings();
       setSettings(data);
     } catch (err) {
       console.error(err);
@@ -34,12 +43,47 @@ export function SettingsView() {
     if (!settings) return;
     setSaving(true);
     try {
-      await updateSettings(settings);
-      showNotification('Global settings synchronized', 'success');
+      updateSettings(settings);
+      showNotification('Global settings saved', 'success');
     } catch (err: any) {
       showNotification(err.message, 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveApiKey = () => {
+    if (!apiKey.trim()) {
+      showNotification('Please enter an API key', 'error');
+      return;
+    }
+    setApiKey(apiKey.trim());
+    setKeyValid(true);
+    showNotification('API key saved to browser storage', 'success');
+  };
+
+  const handleTestApiKey = async () => {
+    if (!apiKey.trim()) {
+      showNotification('Please enter an API key first', 'error');
+      return;
+    }
+    
+    try {
+      showNotification('Testing API key...', 'loading');
+      const { GoogleGenAI } = await import('@google/genai');
+      const client = new GoogleGenAI({ apiKey: apiKey.trim() });
+      
+      // Make a simple test request
+      await client.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: 'Hello',
+      });
+      
+      setKeyValid(true);
+      showNotification('API key is valid!', 'success');
+    } catch (err: any) {
+      setKeyValid(false);
+      showNotification(`API key test failed: ${err.message}`, 'error');
     }
   };
 
@@ -88,6 +132,61 @@ export function SettingsView() {
                    >
                       <Smartphone size={16} />
                       <span className="text-[10px] font-black uppercase tracking-widest">Mobile (9:16)</span>
+                   </button>
+                </div>
+             </div>
+          </div>
+        </section>
+
+        {/* API Key Configuration */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 text-zinc-100 border-b border-zinc-900 pb-4">
+             <Key size={18} className="text-zinc-600" />
+             <h3 className="text-xs font-black uppercase tracking-[0.2em]">Google API Key</h3>
+          </div>
+          
+          <div className="space-y-4">
+             <p className="text-[11px] text-zinc-500 leading-relaxed">
+                Your API key is stored locally in your browser and is never sent to our servers. 
+                You need a <a href="https://ai.google.dev/" target="_blank" className="text-zinc-300 underline hover:text-white">Google AI API key</a> to generate videos and images.
+             </p>
+             
+             <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 block">
+                  API Key
+                  {keyValid === true && <span className="ml-2 text-emerald-500 flex items-center gap-1 inline-flex"><Check size={10} /> Valid</span>}
+                  {keyValid === false && <span className="ml-2 text-red-500 flex items-center gap-1 inline-flex"><AlertTriangle size={10} /> Invalid</span>}
+                </label>
+                <div className="flex gap-2">
+                   <div className="relative flex-grow">
+                      <input 
+                        type={showKey ? "text" : "password"}
+                        value={apiKey}
+                        onChange={(e) => setApiKeyState(e.target.value)}
+                        placeholder="Enter your Google API key..."
+                        className="w-full bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-3 text-xs font-bold text-zinc-300 focus:outline-none focus:border-zinc-700 transition pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKey(!showKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-400"
+                      >
+                        {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                   </div>
+                   <button 
+                     type="button"
+                     onClick={handleSaveApiKey}
+                     className="bg-zinc-900 hover:bg-zinc-800 text-zinc-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition border border-zinc-800"
+                   >
+                     Save Key
+                   </button>
+                   <button 
+                     type="button"
+                     onClick={handleTestApiKey}
+                     className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition border border-zinc-800"
+                   >
+                     Test
                    </button>
                 </div>
              </div>
