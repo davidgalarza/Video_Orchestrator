@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 const clip = readFileSync(
   new URL("./fixtures/clip.mp4", import.meta.url),
@@ -7,7 +7,29 @@ const silent = readFileSync(
   new URL("./fixtures/silent.mp4", import.meta.url),
 ).toString("base64");
 const google = "**/generativelanguage.googleapis.com/**";
-test("social workflow: key, template, references, versions, persistence and responsive layout", async ({
+async function createProject(page: Page, sceneCount = 1) {
+  await page
+    .locator(".home-page")
+    .getByRole("button", { name: "Nuevo proyecto", exact: true })
+    .click();
+  await expect(page.getByLabel("Nombre de la escena")).toHaveValue(
+    "Primera escena",
+  );
+  for (let i = 0; i < sceneCount; i++) {
+    if (i) {
+      await page
+        .getByRole("button", { name: "Añadir escena", exact: true })
+        .click();
+      await expect(page.locator(".scene-card")).toHaveCount(i + 1);
+    }
+    await page
+      .getByLabel("¿Qué ocurre en esta toma?")
+      .fill(`Plano ${i + 1}: la cámara recorre un paisaje al amanecer.`);
+    await page.getByLabel("Nombre de la escena").click();
+  }
+}
+
+test("editor workflow: key, blank project, references, versions, persistence and responsive layout", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -33,7 +55,7 @@ test("social workflow: key, template, references, versions, persistence and resp
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /De una idea/ }),
+    page.getByRole("heading", { name: "Proyectos", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: "artifacts/home-desktop.png",
@@ -56,9 +78,11 @@ test("social workflow: key, template, references, versions, persistence and resp
     "Google acepta la clave",
   );
   await page.getByRole("button", { name: "Mis proyectos" }).click();
-  await page.getByRole("button", { name: /Una historia en 3 escenas/ }).click();
-  await expect(page.getByLabel("Nombre de la escena")).toHaveValue("El gancho");
-  await page.getByLabel("Nombre del proyecto").fill("Reel de café");
+  await createProject(page);
+  await expect(page.getByLabel("Nombre de la escena")).toHaveValue(
+    "Primera escena",
+  );
+  await page.getByLabel("Nombre del proyecto").fill("Secuencia de prueba");
   await page.getByLabel("Nombre de la escena").click();
   await page
     .getByLabel("Subir fotograma inicial", { exact: true })
@@ -118,7 +142,7 @@ test("social workflow: key, template, references, versions, persistence and resp
     )
     .toBeGreaterThan(0);
   await expect(page.getByLabel("Nombre del proyecto")).toHaveValue(
-    "Reel de café",
+    "Secuencia de prueba",
   );
   await page.locator(".versions summary").click();
   await page.getByRole("button", { name: /V1.*Generación/ }).click();
@@ -144,7 +168,7 @@ test("social workflow: key, template, references, versions, persistence and resp
   await page.getByRole("button", { name: "Abrir menú", exact: true }).click();
   await page.getByRole("button", { name: "Mis proyectos" }).click();
   await expect(
-    page.getByRole("heading", { name: /De una idea/ }),
+    page.getByRole("heading", { name: "Proyectos", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: "artifacts/home-mobile.png",
@@ -180,7 +204,7 @@ test("paused generations recover after reload without creating a second video", 
       });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: /Una historia en 3 escenas/ }).click();
+  await createProject(page);
   await page
     .getByRole("button", { name: "Generar escena", exact: true })
     .click();
@@ -216,7 +240,8 @@ test("queue stops on quota failure and leaves remaining scenes as drafts", async
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: /Una historia en 3 escenas/ }).click();
+  await createProject(page, 3);
+  await page.locator(".scene-card").first().click();
   await page.getByRole("button", { name: /Generar pendientes/ }).click();
   await expect(page.locator(".inline-error")).toContainText("cuota");
   expect(posts).toBe(1);
@@ -230,8 +255,7 @@ test("exports mixed silent/audio clips in a single playable MP4 using the local 
 }) => {
   test.setTimeout(120000);
   await page.goto("/");
-  await page.getByRole("button", { name: /Una historia en 3 escenas/ }).click();
-  await expect(page.getByLabel("Nombre de la escena")).toHaveValue("El gancho");
+  await createProject(page, 2);
   await page.evaluate(
     async ({ clip, silent }) => {
       // Seed two legacy-format records to cover migration and the actual export UI.

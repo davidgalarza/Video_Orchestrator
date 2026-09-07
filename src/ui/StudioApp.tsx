@@ -20,7 +20,6 @@ import {
 import { useWorkspace } from "../lib/useWorkspace";
 import * as db from "../lib/storage";
 import { getApiKey, getDefaults } from "../lib/settings";
-import { templates } from "../lib/templates";
 import { downloadBlob } from "../lib/media";
 import { Home } from "./Home";
 import { Editor } from "./Editor";
@@ -50,12 +49,11 @@ export function StudioApp() {
     ? w.projects.find((p) => p.id === route.slice(8))
     : undefined;
   const open = (id: string) => navigate(`project/${id}`);
-  const create = (templateId?: string) =>
+  const create = () =>
     void w.action(async () => {
-      const template = templates.find((t) => t.id === templateId);
       const project = await db.createProject(
-        template?.name || "Mi nueva historia",
-        template?.scenes || [{ title: "Primera escena", prompt: "" }],
+        "Proyecto sin título",
+        [{ title: "Primera escena", prompt: "" }],
         getDefaults(),
       );
       open(project.id);
@@ -224,8 +222,7 @@ export function StudioApp() {
             <div className="connection-banner">
               <KeyRound size={16} />
               <span>
-                Puedes preparar tu historia ahora. Conecta Google cuando quieras
-                generar.
+                Prepara tus escenas y conecta Google cuando quieras generar.
               </span>
               <button onClick={() => navigate("settings")}>
                 Añadir API key

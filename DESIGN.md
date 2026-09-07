@@ -2,7 +2,7 @@
 
 ## Direction
 
-Operate mode. Retain the upstream's charcoal editing workspace, pale primary controls, Lucide icons and project navigation. Refine the existing world for social creators: legible Spanish, a preview-led editor and a visible storyboard. Dark surroundings let video contrast be assessed without a bright UI competing with it.
+Operate mode. Retain the upstream's charcoal editing workspace, pale primary controls, Lucide icons and project navigation. Refine the existing world for general video editing: legible Spanish, a preview-led editor and a visible storyboard. Dark surroundings let video contrast be assessed without a bright UI competing with it.
 
 ## Foundations
 
@@ -14,4 +14,4 @@ Desktop: 224px navigation, flexible preview/storyboard, 344px scene inspector. B
 
 ## Workflow
 
-Start from a social template or blank project. Draft before generating. Keep generation, editing and extension distinct; preserve prior versions. A sequential queue stays at app level while changing views. Persist operation identifiers for explicit recovery after a reload. Save media as blobs and create fresh object URLs for playback.
+Start from a blank project. The home screen provides projects, search and creation directly, without templates or a marketing introduction. Draft before generating. Keep generation, editing and extension distinct; preserve prior versions. A sequential queue stays at app level while changing views. Persist operation identifiers for explicit recovery after a reload. Save media as blobs and create fresh object URLs for playback.

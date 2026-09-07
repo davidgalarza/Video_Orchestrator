@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Browser-native social video studio using Gemini Omni 1.1 Flash and Google Veo",
+  "description": "Browser-native video editor using Gemini Omni 1.1 Flash and Google Veo",
   "author": "Rajjit Laishram",
   "license": "MIT",
   "scripts": {

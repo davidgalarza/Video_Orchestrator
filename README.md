@@ -1,11 +1,11 @@
 # Vidgen Studio
 
-Estudio de vídeo para contenido social, basado en [Video Orchestrator de Rajjit Laishram](https://github.com/rajjitlai/Video_Orchestrator). Interfaz en español, React 19 + TypeScript + Vite, almacenamiento local y despliegue estático en Vercel.
+Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishram](https://github.com/rajjitlai/Video_Orchestrator). Interfaz en español, React 19 + TypeScript + Vite, almacenamiento local y despliegue estático en Vercel.
 
 ## Qué puedes hacer
 
 - Generar vídeos con **Gemini Omni 1.1 Flash** usando tu propia API key de Google AI Studio. También se mantiene Veo 3.1.
-- Empezar con una estructura para Reels, TikTok o Shorts: gancho, desarrollo y cierre; o crear un proyecto en blanco.
+- Crear proyectos en blanco y organizar tus propias escenas.
 - Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
 - Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
 - Elegir formato vertical/horizontal, duración y resolución por escena.

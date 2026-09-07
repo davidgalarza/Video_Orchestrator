@@ -401,7 +401,7 @@ export function Editor({
             <AddButton onClick={() => void add()}>Añadir escena</AddButton>
           }
         >
-          Añade una toma para empezar a construir tu historia.
+          Añade una escena para empezar a editar tu vídeo.
         </Empty>
       )}
     </div>

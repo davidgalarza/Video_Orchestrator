@@ -8,7 +8,7 @@ web
 
 ## Users
 
-The owner creates content for social networks, confirmed in the design interview. The interface uses Spanish.
+People creating and editing videos of any kind. The interface uses Spanish, with no templates or positioning around a specific use case.
 
 ## Product Purpose
 
@@ -20,7 +20,7 @@ Fork of rajjitlai/Video_Orchestrator under MIT. React, TypeScript and Vite; brow
 
 ## Operating Context
 
-Primary workflow: vertical social video, hook → development → close, reusable image references and multiple versions. Users review prompts before requests that consume their Google quota. Downloads and local data are not synchronized across devices.
+Primary workflow: blank projects, freely arranged scenes, reusable image references and multiple versions. Users review prompts before requests that consume their Google quota. Downloads and local data are not synchronized across devices.
 
 ## Product Principles
 
