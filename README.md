@@ -1,181 +1,75 @@
-# Veo Generative Video Orchestrator
+# Vidgen Studio
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-Latest-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Google AI](https://img.shields.io/badge/Google%20AI-Veo%203.1-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
+Estudio de vídeo para contenido social, basado en [Video Orchestrator de Rajjit Laishram](https://github.com/rajjitlai/Video_Orchestrator). Interfaz en español, React 19 + TypeScript + Vite, almacenamiento local y despliegue estático en Vercel.
 
-A **browser-native**, "Google Flow" inspired workspace for creating cinematic product explainers using Google Veo. No server required - runs entirely in your browser.
+## Qué puedes hacer
 
-## Features
+- Generar vídeos con **Gemini Omni 1.1 Flash** usando tu propia API key de Google AI Studio. También se mantiene Veo 3.1.
+- Empezar con una estructura para Reels, TikTok o Shorts: gancho, desarrollo y cierre; o crear un proyecto en blanco.
+- Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
+- Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
+- Elegir formato vertical/horizontal, duración y resolución por escena.
+- Crear versiones, recuperar una toma anterior, editarla mediante un prompt y extenderla con Omni hasta 40 segundos.
+- Generar escenas pendientes en secuencia. La tanda se detiene ante un error para evitar solicitudes adicionales.
+- Pausar el seguimiento y recuperar una operación guardada después de recargar, sin lanzar otra generación.
+- Crear imágenes de referencia con Gemini 3.1 Flash Image.
+- Descargar clips originales o unir las escenas en un MP4 desde el navegador.
 
-- **Project Management** - Create and manage multiple video generation flows
-- **Asset Tray** - Upload character and product reference images for consistency
-- **Storyboard** - Sequential scene generation with frame-to-frame continuity
-- **Video Stitching** - Concatenate scenes into final videos (in-browser via ffmpeg.wasm)
-- **Image Generation** - Generate reference images with Gemini
-- **Veo Integration** - Powered by Google's `veo-3.1-generate-preview`
+## Inicio local
 
-## Tech Stack
-
-- **Framework:** React 18 + TypeScript + Vite
-- **Styling:** Tailwind CSS v4
-- **Storage:** IndexedDB (browser-native database)
-- **Video Processing:** ffmpeg.wasm (WebAssembly)
-- **AI SDK:** @google/genai (direct browser calls)
-- **Icons:** Lucide React
-
-## Prerequisites
-
-- **Google AI API Key** - Get yours at [https://ai.google.dev/](https://ai.google.dev/)
-- **Modern Browser** - Chrome/Edge 90+, Firefox 90+, or Safari 15+
-
-## Quick Start
+Requiere Node.js 22.12+ y un navegador moderno.
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development server
+npm ci
 npm run dev
 ```
 
-Then open `http://localhost:5173` in your browser.
+Abre http://localhost:5173. En **Ajustes**, pega tu clave de Google y pulsa **Guardar clave**. No requiere `.env`, credenciales de servicio, una base de datos externa ni un backend.
 
-## Setup
+**Comprobar conexión** consulta el catálogo de Google sin generar contenido. Confirma que Google acepta la clave, pero no garantiza permiso o cuota para un modelo concreto. La primera generación comprueba ese acceso. Necesitas una clave de la API oficial de Google, no una clave de un intermediario.
 
-1. **Get API Key**
-   - Visit [Google AI Studio](https://ai.google.dev/)
-   - Create or select a project
-   - Generate an API key
+## Desplegar en Vercel
 
-2. **Configure the App**
-   - Open the app in your browser
-   - Go to **Settings** (gear icon in sidebar)
-   - Enter your API key in the "Google API Key" section
-   - Click **Save Key**
-   - Click **Test** to verify
+1. Importa tu fork de este repositorio en Vercel.
+2. Selecciona **Vite**, con `npm run build` y directorio de salida `dist`.
+3. Despliega y abre la URL. Introduce tu clave dentro de **Ajustes**.
 
-3. **Create Your First Project**
-   - Click **+** next to "Active Flows" in the sidebar
-   - Enter a project name
-   - Start adding scenes!
+El archivo `vercel.json` ya contiene la configuración y los encabezados para la exportación de vídeo. No añadas una clave compartida mediante `VITE_*`: esas variables se incluyen en los archivos públicos. Cada navegador utiliza la clave que su usuario introduce.
 
-## Architecture
+Vercel sirve archivos estáticos. Las generaciones y su seguimiento se realizan entre el navegador y Google; no dependen de los tiempos máximos de una función serverless. El motor FFmpeg se carga bajo demanda desde el mismo despliegue, sin un CDN externo.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        BROWSER                              │
-├─────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐  │
-│  │   React UI   │  │  IndexedDB   │  │  @google/genai  │  │
-│  │              │  │  (Data)      │  │  (AI Calls)     │  │
-│  └──────────────┘  └──────────────┘  └─────────────────┘  │
-│         │                 │                    │           │
-│         └─────────────────┴────────────────────┘           │
-│                           │                                 │
-│                    ┌──────────────┐                        │
-│                    │ ffmpeg.wasm  │                        │
-│                    │ (Video Edit) │                        │
-│                    └──────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │  Google AI API  │
-                    │ (Veo & Gemini)  │
-                    └─────────────────┘
-```
+## Datos, recuperación y límites
 
-## Data Storage
+- Los proyectos, imágenes y vídeos se guardan en IndexedDB. No se sincronizan entre dispositivos. Descarga los vídeos importantes antes de borrar los datos del navegador.
+- Se conserva el nombre y esquema de la base de datos del proyecto original. Sus vídeos se leen desde el blob almacenado, creando URLs nuevas al reproducirlos.
+- Cada iteración conserva las versiones anteriores. Pausar detiene el seguimiento local; Google puede continuar procesando y facturando la solicitud.
+- Si ya se recibió el identificador de una operación, **Recuperar resultado** solo consulta y descarga. Si la conexión falla antes de recibirlo, revisa tu actividad de Google antes de crear otra generación: no es posible garantizar que el servidor no haya aceptado la primera.
+- El contexto de Omni para edición y extensión caduca según la retención de Google. Los vídeos descargados al navegador permanecen disponibles aunque caduque ese contexto.
+- Omni permite elegir 360p/720p y salidas reescaladas de 1080p/4K. La extensión solicitada añade 10 segundos, hasta un total de 40; su resultado depende del modelo.
+- La exportación de varias escenas normaliza a **720p, H.264/AAC, 24 fps**, conservando el encuadre mediante bandas cuando los formatos difieren. Los clips individuales se descargan con su calidad original. La guía de zona segura es solo una ayuda visual y no se incrusta en el archivo.
+- La exportación usa memoria y CPU de tu dispositivo; funciona mejor en escritorio. El motor se descarga una vez (aproximadamente 32 MB sin comprimir). Puedes descargar clips por separado en dispositivos con pocos recursos.
+- No se muestran costes ficticios ni se estiman cargos: consulta el consumo real en Google AI Studio.
 
-All data is stored locally in your browser:
-
-| Storage | Purpose | Data |
-|---------|---------|------|
-| **IndexedDB** | Projects, Scenes, Assets | Videos, Images, Metadata |
-| **localStorage** | Settings | API Key, Model Config |
-
-**Note:** Videos are stored as blobs in IndexedDB. Large projects may approach browser storage limits (~50-100MB depending on browser).
-
-## Privacy & Security
-
-- **Your API key** is stored only in your browser's localStorage
-- **Your videos and images** never leave your device except when sent to Google's API for generation
-- **No backend server** - everything runs client-side
-- **No tracking or analytics** - completely private
-
-## Development
+## Desarrollo y validación
 
 ```bash
-# Install dependencies
-npm install
-
-# Run dev server
-npm run dev
-
-# Build for production
+npm run test       # contratos HTTP, recuperación, referencias y almacenamiento
+npm run lint
 npm run build
-
-# Preview production build
-npm run preview
+npm run dev        # mantener activo para las pruebas de navegador
+npm run test:e2e   # flujo completo y exportación real con clips sintéticos
 ```
 
-## Browser Compatibility
+Las pruebas de generación interceptan Google con respuestas simuladas y no consumen cuota. La exportación sí ejecuta FFmpeg real en el navegador. La comprobación con una clave real y acceso a Omni es un paso independiente; las pruebas simuladas no certifican disponibilidad, facturación, CORS o comportamiento real del proveedor.
 
-| Feature | Chrome/Edge | Firefox | Safari |
-|---------|-------------|---------|--------|
-| IndexedDB | ✅ 90+ | ✅ 90+ | ✅ 15+ |
-| WebAssembly | ✅ 90+ | ✅ 90+ | ✅ 15+ |
-| File System Access | ✅ 86+ | ⚠️ Partial | ⚠️ Partial |
+Si Chrome no está instalado en macOS, instala Chromium con `npx playwright install chromium`. Puedes indicar un ejecutable mediante `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
 
-## Roadmap
+## Fuentes técnicas
 
-- [x] Browser-only architecture
-- [x] IndexedDB data storage
-- [x] Google GenAI direct integration
-- [x] ffmpeg.wasm video stitching
-- [x] API key management in settings
-- [ ] Audio generation and overlay
-- [ ] Caption/subtitle support
-- [ ] Export to different formats
-- [ ] Offline mode improvements
+- [Omni: generación, referencias, edición y extensión](https://ai.google.dev/gemini-api/docs/omni)
+- [Contrato de Interactions API](https://ai.google.dev/api/interactions-api)
+- [Veo: contrato de generación](https://ai.google.dev/gemini-api/docs/veo)
 
-## Contributing
+## Licencias
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-## License
-
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
-
-## Acknowledgments
-
-- [Google GenAI SDK](https://github.com/googleapis/js-genai)
-- [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm)
-- [idb](https://github.com/jakearchibald/idb) - IndexedDB wrapper
-- [Tailwind CSS](https://tailwindcss.com/)
-- [Lucide Icons](https://lucide.dev/)
-
-## Troubleshooting
-
-### "API key not configured"
-Go to Settings and add your Google API key.
-
-### "IndexedDB not available"
-Ensure you're not in private/incognito mode. Some browsers disable IndexedDB in private mode.
-
-### Video generation fails
-Check browser console for errors. Common issues:
-- API quota exceeded
-- API key not valid
-- Network issues
-
-### ffmpeg.wasm fails to load
-Ensure you have a stable internet connection for the initial WASM download (~25MB).
-
----
-
-**Made with ❤️ for the open-source community**
+La aplicación conserva la licencia MIT y la atribución del proyecto original en [LICENSE](./LICENSE). La distribución de FFmpeg incluida tiene su propia licencia GPL-2.0-or-later; consulta [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).

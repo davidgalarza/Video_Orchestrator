@@ -1,0 +1,330 @@
+import { useEffect, useState } from "react";
+import {
+  ArrowUpRight,
+  Check,
+  ChevronRight,
+  Clapperboard,
+  Download,
+  Film,
+  Folder,
+  House,
+  Images,
+  KeyRound,
+  Menu,
+  Pause,
+  Plus,
+  Settings2,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useWorkspace } from "../lib/useWorkspace";
+import * as db from "../lib/storage";
+import { getApiKey, getDefaults } from "../lib/settings";
+import { templates } from "../lib/templates";
+import { downloadBlob } from "../lib/media";
+import { Home } from "./Home";
+import { Editor } from "./Editor";
+import { Settings } from "./Settings";
+import { Library } from "./Library";
+import { Dismiss, IconButton } from "./common";
+
+function currentRoute() {
+  return window.location.hash.slice(1) || "home";
+}
+export function StudioApp() {
+  const w = useWorkspace();
+  const [route, setRoute] = useState(currentRoute);
+  const [menu, setMenu] = useState(false);
+  const [connected, setConnected] = useState(() => !!getApiKey());
+  useEffect(() => {
+    const change = () => setRoute(currentRoute());
+    window.addEventListener("hashchange", change);
+    return () => window.removeEventListener("hashchange", change);
+  }, []);
+  const navigate = (next: string) => {
+    window.location.hash = next;
+    setRoute(next);
+    setMenu(false);
+  };
+  const project = route.startsWith("project/")
+    ? w.projects.find((p) => p.id === route.slice(8))
+    : undefined;
+  const open = (id: string) => navigate(`project/${id}`);
+  const create = (templateId?: string) =>
+    void w.action(async () => {
+      const template = templates.find((t) => t.id === templateId);
+      const project = await db.createProject(
+        template?.name || "Mi nueva historia",
+        template?.scenes || [{ title: "Primera escena", prompt: "" }],
+        getDefaults(),
+      );
+      open(project.id);
+    });
+  const nav = [
+    { id: "home", text: "Mis proyectos", icon: House },
+    { id: "assets", text: "Referencias", icon: Images },
+    { id: "videos", text: "Mis vídeos", icon: Film },
+  ];
+  return (
+    <div className="studio-shell">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+      >
+        Saltar al contenido
+      </a>
+      {menu && (
+        <button
+          className="sidebar-scrim"
+          aria-label="Cerrar navegación"
+          onClick={() => setMenu(false)}
+        />
+      )}
+      <aside className={`sidebar ${menu ? "is-open" : ""}`}>
+        <button
+          className="brand"
+          onClick={() => navigate("home")}
+          aria-label="Vidgen Studio, inicio"
+        >
+          <span className="brand-symbol">
+            <Clapperboard size={21} />
+          </span>
+          <span>
+            vidgen<span className="brand-secondary">studio</span>
+          </span>
+        </button>
+        <div className="sidebar-close">
+          <IconButton label="Cerrar menú" onClick={() => setMenu(false)}>
+            <X size={18} />
+          </IconButton>
+        </div>
+        <button className="button primary new-project" onClick={() => create()}>
+          <Plus size={17} />
+          Nuevo proyecto
+        </button>
+        <nav aria-label="Navegación principal">
+          {nav.map((item) => (
+            <button
+              key={item.id}
+              className={route === item.id ? "active" : ""}
+              aria-current={route === item.id ? "page" : undefined}
+              onClick={() => navigate(item.id)}
+            >
+              <item.icon size={17} />
+              {item.text}
+              {item.id === "home" && <span>{w.projects.length}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="recent-projects">
+          <div className="sidebar-label">Recientes</div>
+          {w.projects.slice(0, 8).map((p) => (
+            <button
+              key={p.id}
+              className={project?.id === p.id ? "active" : ""}
+              onClick={() => open(p.id)}
+              title={p.name}
+            >
+              <Folder size={15} />
+              <span>{p.name}</span>
+            </button>
+          ))}
+          {!w.projects.length && <p>Tus proyectos aparecerán aquí.</p>}
+        </div>
+        <div className="sidebar-bottom">
+          <button
+            className={`connection ${connected ? "connected" : ""}`}
+            onClick={() => navigate("settings")}
+          >
+            <span className="connection-dot" />
+            <span>
+              {connected ? "Clave guardada" : "Conecta tu API key"}
+              <small>
+                {connected ? "Google AI Studio" : "Para empezar a generar"}
+              </small>
+            </span>
+            <ChevronRight size={14} />
+          </button>
+          <button
+            className={`settings-nav ${route === "settings" ? "active" : ""}`}
+            onClick={() => navigate("settings")}
+          >
+            <Settings2 size={17} />
+            Ajustes
+          </button>
+          <a
+            href="https://github.com/davidgalarza/Video_Orchestrator"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Código abierto
+            <ArrowUpRight size={13} />
+          </a>
+        </div>
+      </aside>
+      <div className="main-shell">
+        <header className="topbar">
+          <div className="inline">
+            <span className="mobile-menu">
+              <IconButton label="Abrir menú" onClick={() => setMenu(true)}>
+                <Menu size={20} />
+              </IconButton>
+            </span>
+            <span className="breadcrumb">
+              Estudio
+              <ChevronRight size={13} />
+              <strong>
+                {project
+                  ? project.name
+                  : route === "assets"
+                    ? "Referencias"
+                    : route === "videos"
+                      ? "Mis vídeos"
+                      : route === "settings"
+                        ? "Ajustes"
+                        : "Mis proyectos"}
+              </strong>
+            </span>
+          </div>
+          <div className="inline">
+            {project && (
+              <IconButton
+                label="Eliminar proyecto"
+                disabled={!!w.job}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `¿Eliminar «${project.name}» y todos sus vídeos locales?`,
+                    )
+                  )
+                    void w.action(async () => {
+                      await db.deleteProject(project.id);
+                      navigate("home");
+                    });
+                }}
+              >
+                <Trash2 size={15} />
+              </IconButton>
+            )}
+            <button
+              className="text-button api-status"
+              onClick={() => navigate("settings")}
+            >
+              {connected ? <Check size={14} /> : <KeyRound size={14} />}
+              {connected ? "API key guardada" : "Conectar Google"}
+            </button>
+          </div>
+        </header>
+        <main id="main-content" className="main-content" tabIndex={-1}>
+          {!connected && route !== "settings" && (
+            <div className="connection-banner">
+              <KeyRound size={16} />
+              <span>
+                Puedes preparar tu historia ahora. Conecta Google cuando quieras
+                generar.
+              </span>
+              <button onClick={() => navigate("settings")}>
+                Añadir API key
+                <ArrowUpRight size={14} />
+              </button>
+            </div>
+          )}
+          {w.loading ? (
+            <div
+              className="loading-layout"
+              aria-label="Cargando proyectos"
+              aria-busy="true"
+            >
+              <div />
+              <div />
+              <div />
+            </div>
+          ) : (
+            <>
+              {route === "settings" && (
+                <Settings
+                  workspace={w}
+                  onKeyChange={() => setConnected(!!getApiKey())}
+                />
+              )}
+              <div hidden={route !== "assets"}>
+                <Library workspace={w} open={open} />
+              </div>
+              {route === "videos" && (
+                <Library key="videos" workspace={w} videos open={open} />
+              )}
+              {project && (
+                <Editor
+                  key={project.id}
+                  project={project}
+                  workspace={w}
+                  settings={() => navigate("settings")}
+                />
+              )}
+              {(route === "home" ||
+                (!project &&
+                  !["settings", "assets", "videos"].includes(route))) && (
+                <Home workspace={w} create={create} open={open} />
+              )}
+            </>
+          )}
+        </main>
+        {w.job && (
+          <div className="job-bar" role="status">
+            <span className="activity-dot" />
+            <span>
+              <strong>{w.job.text}</strong>
+              <small>
+                Escena {w.job.index} de {w.job.total} en esta tanda
+              </small>
+            </span>
+            <button
+              className="text-button"
+              onClick={() => {
+                const scene = w.scenes.find((s) => s.id === w.job!.sceneId);
+                if (scene) open(scene.project_id);
+              }}
+            >
+              Ver proyecto
+            </button>
+            <IconButton
+              label="Pausar seguimiento de la generación"
+              onClick={w.pause}
+            >
+              <Pause size={16} />
+            </IconButton>
+          </div>
+        )}
+      </div>
+      {w.notice && (
+        <div
+          className={`toast ${w.notice.error ? "toast-error" : ""}`}
+          role={w.notice.error ? "alert" : "status"}
+        >
+          <span>{w.notice.text}</span>
+          <Dismiss onClick={() => w.setNotice(null)} />
+        </div>
+      )}
+      {w.recovery && (
+        <div className="recovery-banner" role="alert">
+          <span>
+            Tu vídeo está listo, pero no se pudo guardar en el navegador.
+          </span>
+          <button
+            className="button primary"
+            onClick={() =>
+              downloadBlob(w.recovery!.blob, "video-recuperado.mp4")
+            }
+          >
+            <Download size={16} />
+            Descargar ahora
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
