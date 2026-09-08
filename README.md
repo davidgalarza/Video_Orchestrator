@@ -12,6 +12,7 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 - Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
 - Recuperar clips eliminados desde la papelera o con **Deshacer**, conservando sus versiones y su posición en la secuencia.
 - Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
+- Elegir referencias desde una galería con búsqueda, miniaturas completas y vista ampliada. Subir imágenes por botón o arrastrándolas al selector; quedan guardadas en Referencias para reutilizarlas. La selección se aplica al confirmar, y cancelar conserva las imágenes que ya usaba el clip.
 - Elegir formato vertical/horizontal, duración y resolución por escena.
 - Crear clips editados o extendidos a partir de una toma con Omni, conservando el original y su enlace de origen. La extensión admite hasta 40 segundos.
 - Generar escenas pendientes en secuencia. La tanda se detiene ante un error para evitar solicitudes adicionales.

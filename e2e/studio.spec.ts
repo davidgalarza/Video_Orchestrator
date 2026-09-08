@@ -116,14 +116,26 @@ test("editor workflow: key, blank project, references, versions, persistence and
     .click();
   await page.locator(".reference-details summary").click();
   await page
-    .getByLabel("Subir fotograma inicial", { exact: true })
+    .getByRole("button", { name: "Elegir fotograma inicial", exact: true })
+    .click();
+  await page
+    .getByLabel("Subir imágenes de referencia", { exact: true })
     .setInputFiles("e2e/fixtures/reference.png");
   await expect(
-    page.getByLabel("Fotograma inicial", { exact: true }),
-  ).not.toHaveValue("");
+    page.getByRole("button", { name: "Usar fotograma inicial", exact: true }),
+  ).toBeEnabled();
   await page
-    .getByLabel("Fotograma final", { exact: true })
-    .selectOption({ label: "reference.png" });
+    .getByRole("button", { name: "Usar fotograma inicial", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Elegir fotograma final", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Seleccionar reference.png", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Usar fotograma final", exact: true })
+    .click();
 
   await page.screenshot({
     path: "artifacts/editor-desktop.png",
@@ -1349,4 +1361,232 @@ test("activity prioritizes a pending clip and cancels a batch after reload witho
     page.getByRole("button", { name: "Recuperar resultado", exact: true }),
   ).toBeVisible();
   expect(posts).toBe(1);
+});
+
+test("visual references: upload, search, zoom, selection limits, cancel and persistence", async ({
+  page,
+}) => {
+  await page.route(google, (route) => route.abort());
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await createProject(page);
+  await page.locator(".reference-details summary").click();
+  await expect(
+    page.getByRole("button", { name: "Elegir fotograma final", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Elegir referencias", exact: true })
+    .click();
+  const picker = page.getByRole("dialog", {
+    name: "Elegir referencias visuales",
+    exact: true,
+  });
+  const png = readFileSync(
+    new URL("./fixtures/reference.png", import.meta.url),
+  ).toString("base64");
+  const files = await page.evaluateHandle((data) => {
+    const transfer = new DataTransfer();
+    for (const name of [
+      "Persona.png",
+      "Objeto.png",
+      "Estilo.png",
+      "Paisaje.png",
+    ]) {
+      transfer.items.add(
+        new File([Uint8Array.from(atob(data), (c) => c.charCodeAt(0))], name, {
+          type: "image/png",
+        }),
+      );
+    }
+    return transfer;
+  }, png);
+  await picker
+    .getByTestId("reference-dropzone")
+    .dispatchEvent("drop", { dataTransfer: files });
+  await expect(picker.locator(".reference-choice")).toHaveCount(4);
+  await expect(picker.getByRole("status")).toContainText(
+    "4 imágenes guardadas",
+  );
+  await expect(
+    picker.getByRole("button", {
+      name: "Seleccionar Paisaje.png",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(picker.locator(".reference-picker-footer")).toContainText(
+    "3 de 3 seleccionadas",
+  );
+  await page.screenshot({
+    path: "artifacts/references-desktop.png",
+    fullPage: true,
+  });
+  await picker
+    .getByRole("button", { name: "Seleccionar Objeto.png", exact: true })
+    .click();
+  await picker.getByLabel("Buscar referencias").fill("paisaje");
+  await expect(picker.locator(".reference-choice")).toHaveCount(1);
+  await picker
+    .getByRole("button", { name: "Ampliar Paisaje.png", exact: true })
+    .click();
+  await expect(picker.locator(".reference-large img")).toBeVisible();
+  await picker
+    .getByRole("button", { name: "Seleccionar esta imagen", exact: true })
+    .click();
+  await picker
+    .getByRole("button", { name: "Usar referencias", exact: true })
+    .click();
+  await expect(picker).toHaveCount(0);
+  await expect(page.locator(".reference-guide-list > div")).toHaveCount(3);
+  await expect(page.locator(".reference-guide-list")).toContainText(
+    "Paisaje.png",
+  );
+  await expect(page.locator(".reference-guide-list")).not.toContainText(
+    "Objeto.png",
+  );
+  await page
+    .getByRole("button", { name: "Cambiar referencias", exact: true })
+    .click();
+  await picker
+    .getByRole("button", { name: "Seleccionar Persona.png", exact: true })
+    .click();
+  await page.keyboard.press("Escape");
+  await expect(picker).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(page.locator(".reference-guide-list > div")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "Cambiar referencias", exact: true }),
+  ).toBeFocused();
+  await page
+    .getByRole("button", { name: "Elegir fotograma inicial", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Seleccionar Objeto.png", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Usar fotograma inicial", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Elegir fotograma final", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Seleccionar Paisaje.png", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Usar fotograma final", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Elegir fotograma final", exact: true }),
+  ).toHaveCount(0);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await expect(page.locator(".reference-guide-list > div")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "Elegir fotograma inicial", exact: true }),
+  ).toContainText("Objeto.png");
+  await expect(
+    page.getByRole("button", { name: "Elegir fotograma final", exact: true }),
+  ).toContainText("Paisaje.png");
+  await page
+    .getByRole("button", { name: "Cambiar referencias", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "artifacts/references-form-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("button", { name: "Cambiar referencias", exact: true })
+    .click();
+  await page.screenshot({
+    path: "artifacts/references-mobile.png",
+    fullPage: true,
+  });
+  await expect(
+    picker.getByRole("button", { name: "Usar referencias", exact: true }),
+  ).toBeInViewport();
+  await expect(picker).toHaveJSProperty(
+    "scrollWidth",
+    await picker.evaluate((el) => el.clientWidth),
+  );
+  await picker
+    .getByRole("button", { name: "Ampliar Persona.png", exact: true })
+    .click();
+  await page.screenshot({
+    path: "artifacts/references-zoom-mobile.png",
+    fullPage: true,
+  });
+  await expect(
+    picker.getByRole("button", { name: "Quitar de la selección", exact: true }),
+  ).toBeInViewport();
+  await picker.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Quitar fotograma inicial", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Elegir fotograma final", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".reference-frames img")).toHaveCount(0);
+  await files.dispose();
+});
+
+test("reference uploads reject broken images and preserve the current selection", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await createProject(page);
+  await page.locator(".reference-details summary").click();
+  await page
+    .getByRole("button", { name: "Elegir referencias", exact: true })
+    .click();
+  const picker = page.getByRole("dialog", {
+    name: "Elegir referencias visuales",
+    exact: true,
+  });
+  await picker.getByLabel("Subir imágenes de referencia").setInputFiles([
+    {
+      name: "Correcta.png",
+      mimeType: "image/png",
+      buffer: readFileSync(
+        new URL("./fixtures/reference.png", import.meta.url),
+      ),
+    },
+    {
+      name: "Rota.png",
+      mimeType: "image/png",
+      buffer: Buffer.from("not an image"),
+    },
+    {
+      name: "Texto.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("not an image"),
+    },
+  ]);
+  await expect(picker.getByRole("status")).toContainText(
+    "No se puede abrir esta imagen",
+  );
+  await expect(picker.locator(".reference-choice")).toHaveCount(1);
+  await expect(
+    picker.getByRole("button", {
+      name: "Seleccionar Correcta.png",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await picker
+    .getByRole("button", { name: "Usar referencias", exact: true })
+    .click();
+  await expect(page.locator(".reference-guide-list")).toContainText(
+    "Correcta.png",
+  );
+  await page
+    .getByRole("button", { name: "Cambiar referencias", exact: true })
+    .click();
+  await picker
+    .getByRole("button", { name: "Seleccionar Correcta.png", exact: true })
+    .click();
+  await picker.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.locator(".reference-guide-list")).toContainText(
+    "Correcta.png",
+  );
 });

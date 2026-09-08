@@ -5,11 +5,13 @@ export function StudioDialog({
   children,
   onClose,
   wide = false,
+  busy = false,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  busy?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const label = useId();
@@ -32,13 +34,15 @@ export function StudioDialog({
       aria-labelledby={label}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        event.stopPropagation();
+        if (!busy) onClose();
       }}
     >
       <header>
         <h2 id={label}>{title}</h2>
         <button
           className="icon-button"
+          disabled={busy}
           aria-label={`Cerrar ${title.toLocaleLowerCase()}`}
           onClick={onClose}
         >

@@ -12,6 +12,16 @@ export async function storeImage(
     throw new Error(
       "La imagen supera 5 MB. Reduce su tamaño y vuelve a subirla.",
     );
+  if (typeof createImageBitmap === "function") {
+    try {
+      const image = await createImageBitmap(file);
+      image.close();
+    } catch {
+      throw new Error(
+        "No se puede abrir esta imagen. Prueba con otro archivo JPG, PNG o WebP.",
+      );
+    }
+  }
   const asset: Asset = {
     id: crypto.randomUUID(),
     type,
