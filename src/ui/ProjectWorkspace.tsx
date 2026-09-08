@@ -49,7 +49,7 @@ export function ProjectWorkspace({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [packing, setPacking] = useState(false);
-  const [sort, setSort] = useState("order");
+  const [sort, setSort] = useState("recent");
   const [deleted, setDeleted] = useState<string>();
   const [creating, setCreating] = useState(false);
   const focusReturn = useRef<HTMLElement | null>(null);
