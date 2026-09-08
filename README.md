@@ -10,9 +10,9 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 - Recuperar clips eliminados desde la papelera o con **Deshacer**, conservando sus versiones y su posición en la secuencia.
 - Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
 - Elegir formato vertical/horizontal, duración y resolución por escena.
-- Crear versiones, recuperar una toma anterior, editarla mediante un prompt y extenderla con Omni hasta 40 segundos.
+- Crear clips editados o extendidos a partir de una toma con Omni, conservando el original y su enlace de origen. La extensión admite hasta 40 segundos.
 - Generar escenas pendientes en secuencia. La tanda se detiene ante un error para evitar solicitudes adicionales.
-- Elegir de 1 a 20 versiones por solicitud y seguir preparando o enviando clips mientras avanza una cola en segundo plano.
+- Elegir de 1 a 20 clips por solicitud y seguir preparando o enviando clips mientras avanza una cola en segundo plano.
 - Pausar el seguimiento y recuperar una operación guardada después de recargar, sin lanzar otra generación.
 - Crear imágenes de referencia con Gemini 3.1 Flash Image.
 - Descargar un clip o seleccionar varios para obtener un ZIP con sus vídeos originales y un archivo `clips.json` con prompts y ajustes.
@@ -26,9 +26,13 @@ Para un montaje rápido, selecciona clips y pulsa **Añadir a secuencia**. Orden
 
 En el modal, escribe el prompt y ajusta la salida; las referencias son opcionales y se despliegan cuando las necesitas. Las instrucciones de edición y extensión también se guardan. Puedes preparar otro clip mientras se genera uno y volver desde Ajustes al clip abierto. En móvil, alterna entre **Configurar** y **Vista previa**. En la biblioteca puedes ordenar, filtrar los clips **Por revisar** y recuperar resultados pendientes directamente.
 
-**Versiones a generar** indica cuántas solicitudes enviar. Al aceptarlas, el modal se cierra y la biblioteca muestra el estado de Google, la versión en curso y las pendientes. Cada solicitud conserva el prompt, los ajustes y las referencias que enviaste aunque después cambies el borrador. Las variantes de edición o extensión parten todas de la versión seleccionada; no se encadenan entre sí.
+**Cantidad de clips** indica cuántos vídeos crear. Cada resultado aparece en una tarjeta independiente, listo para seleccionar, descargar, eliminar o añadir al montaje. Al aceptarlos, el modal se cierra y la biblioteca muestra el estado de Google y los clips pendientes. Cada solicitud conserva el prompt, los ajustes y las referencias enviados aunque después cambies el borrador.
 
-La cola procesa una solicitud cada vez y puedes añadir otras mientras trabaja. **Cancelar pendientes** retira las solicitudes que todavía no han empezado de ese clip. **Pausar seguimiento** detiene el seguimiento local y la cola, sin cancelar la operación que Google ya recibió. Mantén la pestaña abierta para que siga avanzando. Tras recargar, las solicitudes pendientes se conservan pausadas: usa **Recuperar resultado** si hay una operación interrumpida o **Continuar cola** para las que aún no se enviaron. Un error detiene la cola y conserva lo restante.
+**Editar** crea un clip nuevo con los cambios; **Extender** crea otro que incluye el vídeo original y 10 segundos de continuación. El clip de origen se conserva y los resultados tienen un enlace **Ver origen**. Si solicitas varios, todos parten de la misma toma seleccionada. Puedes extender de nuevo el resultado cuando quieras continuar desde él.
+
+Los resultados guardados con el flujo anterior siguen disponibles en **Resultados anteriores**. **Separar en clips** conserva la toma activa en su tarjeta y convierte las demás en clips independientes, sin volver a generar ni perder archivos.
+
+La cola procesa una solicitud cada vez y puedes añadir otras mientras trabaja. **Cancelar pendientes** retira las solicitudes que todavía no han empezado de ese clip. **Pausar seguimiento** detiene el seguimiento local y la cola, sin cancelar la operación que Google ya recibió. Mantén la pestaña abierta para que siga avanzando. Tras recargar, las solicitudes pendientes se conservan pausadas: usa **Recuperar resultado** si hay una operación interrumpida o **Continuar cola** para las que aún no se enviaron. Un error detiene la cola y conserva lo restante. **Reintentar clip** utiliza la solicitud guardada en esa misma tarjeta, incluyendo el vídeo base de una edición o extensión.
 
 ## Inicio local
 

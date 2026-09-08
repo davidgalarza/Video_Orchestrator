@@ -213,8 +213,7 @@ export function ProjectWorkspace({
               Clips del proyecto <span className="count">{scenes.length}</span>
             </h1>
             <p>
-              Genera, compara versiones y descarga cada vídeo para seguir
-              editando.
+              Genera, compara clips y descarga cada vídeo para seguir editando.
             </p>
           </div>
           <button
@@ -433,7 +432,9 @@ export function ProjectWorkspace({
                     )}
                     {blob && (
                       <span className="clip-version">
-                        V{versionNumber} ·{" "}
+                        {(scene.versions?.length || 0) > 1
+                          ? `Resultado ${versionNumber} · `
+                          : ""}
                         {version?.duration || sceneSettings(scene).duration} s
                       </span>
                     )}
@@ -475,8 +476,8 @@ export function ProjectWorkspace({
                         {w.job?.sceneId === scene.id && (
                           <>
                             <strong>
-                              <LoaderCircle size={14} className="spin" />{" "}
-                              Versión {w.job.index} de {w.job.total}
+                              <LoaderCircle size={14} className="spin" /> Clip{" "}
+                              {w.job.index} de {w.job.total}
                             </strong>
                             <span>{w.job.text}</span>
                           </>
@@ -500,6 +501,42 @@ export function ProjectWorkspace({
                         )}
                       </div>
                     )}
+                    {scene.origin && (
+                      <div className="clip-origin">
+                        <span>
+                          {scene.origin.mode === "edit"
+                            ? "Editado"
+                            : scene.origin.mode === "extend"
+                              ? "Extendido"
+                              : "Nueva toma"}{" "}
+                          · {scene.origin.title}
+                        </span>
+                        {!scene.deleted_at &&
+                          scenes.some(
+                            (s) => s.id === scene.origin!.sceneId,
+                          ) && (
+                            <button
+                              className="text-button"
+                              onClick={() => openClip(scene.origin!.sceneId)}
+                            >
+                              Ver origen
+                            </button>
+                          )}
+                      </div>
+                    )}
+                    {!scene.deleted_at &&
+                      !blob &&
+                      !scene.task?.remoteId &&
+                      scene.output_request &&
+                      !scene.generation_queue?.length &&
+                      w.job?.sceneId !== scene.id && (
+                        <button
+                          className="text-button recover-clip"
+                          onClick={() => void w.retry(scene.id)}
+                        >
+                          Reintentar clip
+                        </button>
+                      )}
                     <p className="clip-prompt">
                       {version?.prompt ||
                         scene.prompt ||
@@ -509,10 +546,8 @@ export function ProjectWorkspace({
                       <span>
                         {references.length}{" "}
                         {references.length === 1 ? "referencia" : "referencias"}{" "}
-                        · {scene.versions?.length || (blob ? 1 : 0)}{" "}
-                        {(scene.versions?.length || (blob ? 1 : 0)) === 1
-                          ? "versión"
-                          : "versiones"}
+                        {(scene.versions?.length || 0) > 1 &&
+                          ` · ${scene.versions!.length} resultados anteriores`}
                       </span>
                       {scene.deleted_at ? (
                         <button
@@ -641,7 +676,12 @@ export function ProjectWorkspace({
             settings={() => settings(editing)}
             initialSceneId={editing}
             clipOnly
-            onGenerationQueued={() => setView("clips")}
+            onGenerationQueued={() => {
+              setFilter("all");
+              setSearch("");
+              setView("clips");
+            }}
+            openClip={(id) => openClip(id, focusReturn.current)}
             browseClips={() => setView("clips")}
           />
         </ClipDialog>
@@ -699,7 +739,7 @@ function ClipDialog({
       <header className="clip-dialog-header">
         <div>
           <h2 id="clip-dialog-title">Generar y editar clip</h2>
-          <p>Prompt, referencias y versiones de un solo vídeo.</p>
+          <p>Genera clips nuevos o transforma una toma.</p>
         </div>
         <IconButton label="Cerrar editor de clip" onClick={onClose}>
           <X size={20} />

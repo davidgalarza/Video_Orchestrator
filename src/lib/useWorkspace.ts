@@ -12,6 +12,7 @@ import {
   activeVersion,
   OMNI_MODEL,
   sceneSettings,
+  sceneBlob,
   type GenerationMode,
   type GenerationTask,
   type Scene,
@@ -153,6 +154,7 @@ export function useWorkspace() {
     instruction?: string,
     resume = false,
     count = 1,
+    retry = false,
   ): Promise<boolean> {
     const enqueue = async () => {
       try {
@@ -161,7 +163,7 @@ export function useWorkspace() {
             "Conecta tu clave de Google en Ajustes antes de generar.",
           );
         if (!Number.isInteger(count) || count < 1 || count > 20)
-          throw new Error("Elige entre 1 y 20 versiones por solicitud.");
+          throw new Error("Elige entre 1 y 20 clips por solicitud.");
         const current = await db.readWorkspace();
         const items: QueuedGeneration[] = [];
         for (const id of new Set(ids)) {
@@ -183,23 +185,38 @@ export function useWorkspace() {
             throw new Error(
               "Recupera el resultado pendiente de este clip antes de generar de nuevo.",
             );
+          if (
+            retry &&
+            (!scene.output_request ||
+              sceneBlob(scene) ||
+              scene.generation_queue?.length ||
+              activeRequest.current?.sceneId === id)
+          )
+            throw new Error(
+              "Este clip no tiene una solicitud fallida que reintentar.",
+            );
           const selected = activeVersion(scene);
           const task: GenerationTask = resume
             ? scene.task!
-            : {
-                prompt: mode === "generate" ? scene.prompt : instruction || "",
-                settings:
-                  mode === "generate"
-                    ? sceneSettings(scene)
-                    : selected?.settings || sceneSettings(scene),
-                mode,
-                previousInteractionId:
-                  mode === "generate" ? undefined : selected?.interactionId,
-                previousDuration: selected?.duration,
-                started_at: new Date().toISOString(),
-              };
-          const images: ReferenceImage[] = [];
-          if (mode === "generate" && !resume) {
+            : retry
+              ? { ...scene.output_request!.task, remoteId: undefined }
+              : {
+                  prompt:
+                    mode === "generate" ? scene.prompt : instruction || "",
+                  settings:
+                    mode === "generate"
+                      ? sceneSettings(scene)
+                      : selected?.settings || sceneSettings(scene),
+                  mode,
+                  previousInteractionId:
+                    mode === "generate" ? undefined : selected?.interactionId,
+                  previousDuration: selected?.duration,
+                  started_at: new Date().toISOString(),
+                };
+          const images: ReferenceImage[] = retry
+            ? scene.output_request!.images
+            : [];
+          if (mode === "generate" && !resume && !retry) {
             const roles = [
               [scene.first_frame_asset_id, "first"],
               [scene.last_frame_asset_id, "last"],
@@ -238,14 +255,20 @@ export function useWorkspace() {
             });
         }
         if (!items.length) return false;
-        await db.enqueueGenerations(items);
+        let outputs = items;
+        if (resume || retry) await db.enqueueGenerations(items);
+        else outputs = await db.enqueueClipOutputs(items);
         queueRef.current = resume
-          ? [...items, ...queueRef.current]
-          : [...queueRef.current, ...items];
+          ? [...outputs, ...queueRef.current]
+          : [...queueRef.current, ...outputs];
         publishQueue();
         await refresh();
         setNotice(null);
-        if (resume) {
+        if (
+          resume ||
+          (retry &&
+            !queueRef.current.some((q) => !outputs.some((o) => o.id === q.id)))
+        ) {
           paused.current = false;
           setQueuePaused(false);
         }
@@ -285,7 +308,7 @@ export function useWorkspace() {
         try {
           if (!item.resume && scene.task?.remoteId)
             throw new Error(
-              "Recupera el resultado pendiente antes de continuar las versiones de este clip.",
+              "Recupera el resultado pendiente antes de continuar este clip.",
             );
           if (ctrl.signal.aborted) break;
           if (!(await db.startQueuedGeneration(item))) {
@@ -396,6 +419,8 @@ export function useWorkspace() {
     action,
     patch,
     run,
+    retry: (sceneId: string) =>
+      run([sceneId], "generate", undefined, false, 1, true),
     pause: () => {
       paused.current = true;
       setQueuePaused(true);

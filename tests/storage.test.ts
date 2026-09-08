@@ -273,3 +273,122 @@ describe("durable background queue", () => {
     expect((await db.getScene(scene.id))?.task?.remoteId).toBe("remote-op");
   });
 });
+
+describe("independent generated clips", () => {
+  it("allocates N cards with one request each and preserves the source when editing or extending", async () => {
+    const project = await db.createProject(
+      "Independent",
+      [{ title: "Landscape", prompt: "Mountain" }],
+      DEFAULT_VIDEO,
+    );
+    const original = (await db.readWorkspace()).scenes.find(
+      (s) => s.project_id === project.id,
+    )!;
+    const request = {
+      id: "output-1",
+      sceneId: original.id,
+      task: {
+        mode: "generate" as const,
+        prompt: "Mountain",
+        settings: DEFAULT_VIDEO,
+        started_at: "today",
+      },
+      images: [],
+      index: 1,
+      total: 3,
+      created_at: "today",
+    };
+    const outputs = await db.enqueueClipOutputs([
+      request,
+      { ...request, id: "output-2", index: 2 },
+      { ...request, id: "output-3", index: 3 },
+    ]);
+    expect(new Set(outputs.map((q) => q.sceneId)).size).toBe(3);
+    expect(outputs[0].sceneId).toBe(original.id);
+    let clips = (await db.readWorkspace()).scenes.filter(
+      (s) => s.project_id === project.id,
+    );
+    expect(clips).toHaveLength(3);
+    expect(clips.every((s) => s.generation_queue?.length === 1)).toBe(true);
+    await db.startQueuedGeneration(outputs[0]);
+    const version: ClipVersion = {
+      id: "base",
+      blob: new Blob(["base video"]),
+      mode: "generate",
+      prompt: "Mountain",
+      settings: DEFAULT_VIDEO,
+      duration: 8,
+      created_at: "today",
+      interactionId: "base-remote",
+    };
+    await db.saveVersion(original.id, version);
+    for (const mode of ["edit", "extend"] as const) {
+      const [output] = await db.enqueueClipOutputs([
+        {
+          ...request,
+          id: `output-${mode}`,
+          task: {
+            ...request.task,
+            mode,
+            prompt: "Move camera",
+            previousInteractionId: "base-remote",
+            previousDuration: 8,
+          },
+          total: 1,
+        },
+      ]);
+      expect(output.sceneId).not.toBe(original.id);
+      const derived = (await db.getScene(output.sceneId))!;
+      expect(derived.origin).toMatchObject({
+        sceneId: original.id,
+        versionId: "base",
+        mode,
+      });
+      expect(derived.output_request?.task.previousInteractionId).toBe(
+        "base-remote",
+      );
+    }
+    clips = (await db.readWorkspace()).scenes.filter(
+      (s) => s.project_id === project.id,
+    );
+    expect(clips).toHaveLength(5);
+    expect((await db.getScene(original.id))?.versions).toHaveLength(1);
+    expect(await sceneBlob((await db.getScene(original.id))!)?.text()).toBe(
+      "base video",
+    );
+  });
+
+  it("separates existing versions without changing the active result or losing media", async () => {
+    const project = await db.createProject(
+      "Old results",
+      [{ title: "Clip", prompt: "Scene" }],
+      DEFAULT_VIDEO,
+    );
+    const original = (await db.readWorkspace()).scenes.find(
+      (s) => s.project_id === project.id,
+    )!;
+    for (const id of ["old-a", "old-b", "old-c"])
+      await db.saveVersion(original.id, {
+        id,
+        blob: new Blob([id]),
+        prompt: id,
+        settings: DEFAULT_VIDEO,
+        mode: "generate",
+        duration: 8,
+        created_at: "today",
+      });
+    await db.patchScene(original.id, { active_version_id: "old-b" });
+    await db.separateVersions(original.id);
+    await db.separateVersions(original.id);
+    const clips = (await db.readWorkspace()).scenes.filter(
+      (s) => s.project_id === project.id,
+    );
+    expect(clips).toHaveLength(3);
+    expect(clips.every((s) => s.versions?.length === 1)).toBe(true);
+    expect(await Promise.all(clips.map((s) => sceneBlob(s)!.text()))).toEqual([
+      "old-b",
+      "old-a",
+      "old-c",
+    ]);
+  });
+});

@@ -44,6 +44,7 @@ export function Editor({
   browseClips,
   clipOnly = false,
   onGenerationQueued,
+  openClip,
 }: {
   project: Project;
   workspace: WorkspaceController;
@@ -53,6 +54,7 @@ export function Editor({
   browseClips: () => void;
   clipOnly?: boolean;
   onGenerationQueued?: () => void;
+  openClip?: (id: string) => void;
 }) {
   const allScenes = w.scenes.filter((s) => s.project_id === project.id);
   const scenes = sequenceMode ? sequenceScenes(project, allScenes) : allScenes;
@@ -261,7 +263,9 @@ export function Editor({
             <div className="preview-meta">
               <span>
                 {version
-                  ? `Versión ${scene.versions!.findIndex((v) => v.id === version.id) + 1}`
+                  ? scene.versions!.length > 1
+                    ? `Resultado ${scene.versions!.findIndex((v) => v.id === version.id) + 1}`
+                    : "Clip listo"
                   : sceneBlob(scene)
                     ? "Vídeo original"
                     : "Sin generar"}
@@ -449,7 +453,8 @@ export function Editor({
             assets={w.assets}
             workspace={w}
             openSettings={settings}
-            onGenerationQueued={onGenerationQueued}
+            onGenerationQueued={onGenerationQueued || browseClips}
+            openClip={openClip}
           />
         </div>
       ) : (
@@ -480,19 +485,23 @@ function Inspector({
   workspace: w,
   openSettings,
   onGenerationQueued,
+  openClip,
 }: {
   scene: Scene;
   assets: Asset[];
   workspace: WorkspaceController;
   openSettings: () => void;
   onGenerationQueued?: () => void;
+  openClip?: (id: string) => void;
 }) {
   const [prompt, setPrompt] = useState(scene.prompt);
   const [title, setTitle] = useState(
     scene.title || `Escena ${scene.order + 1}`,
   );
   const [mode, setMode] = useState<GenerationMode>(
-    activeVersion(scene)?.interactionId ? "edit" : "generate",
+    activeVersion(scene)?.interactionId
+      ? "edit"
+      : scene.output_request?.task.mode || "generate",
   );
   const [editPrompt, setEditPrompt] = useState(scene.edit_prompt || "");
   const [extendPrompt, setExtendPrompt] = useState(scene.extend_prompt || "");
@@ -503,9 +512,22 @@ function Inspector({
   const [uploading, setUploading] = useState(false);
   const [count, setCount] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const awaiting =
+    !sceneBlob(scene) &&
+    (w.job?.sceneId === scene.id || !!scene.generation_queue?.length);
+  const retryable =
+    !!scene.output_request &&
+    !sceneBlob(scene) &&
+    !awaiting &&
+    !scene.task?.remoteId;
   const version = activeVersion(scene),
     config = sceneSettings(scene),
-    busy = submitting;
+    busy =
+      submitting ||
+      (awaiting && scene.output_request?.task.mode !== "generate") ||
+      retryable;
+  const baseDuration =
+    version?.duration || scene.output_request?.task.previousDuration || 0;
   const editable =
     !!version?.interactionId && version.settings.model === OMNI_MODEL;
   const save = (patch: Partial<Scene>) => {
@@ -570,6 +592,27 @@ function Inspector({
         <WandSparkles size={16} />
       </div>
       <div className="inspector-content">
+        {scene.origin && (
+          <div className="clip-base">
+            <span>
+              {scene.origin.mode === "edit"
+                ? "Edición"
+                : scene.origin.mode === "extend"
+                  ? "Extensión"
+                  : "Nueva toma"}{" "}
+              de «{scene.origin.title}»
+            </span>
+            {openClip &&
+              w.scenes.some((s) => s.id === scene.origin!.sceneId) && (
+                <button
+                  className="text-button"
+                  onClick={() => openClip(scene.origin!.sceneId)}
+                >
+                  Ver clip de origen
+                </button>
+              )}
+          </div>
+        )}
         <label>
           <span>
             Nombre de la escena{" "}
@@ -611,7 +654,7 @@ function Inspector({
             >
               {m === "generate"
                 ? version
-                  ? "Nueva toma"
+                  ? "Nuevo clip"
                   : "Crear"
                 : m === "edit"
                   ? "Editar"
@@ -619,6 +662,16 @@ function Inspector({
             </button>
           ))}
         </div>
+        {mode !== "generate" && version && (
+          <div className="clip-base">
+            <strong>Vídeo base: {title}</strong>
+            <span>
+              {mode === "edit"
+                ? `${version.duration} s · Cada resultado aplica los cambios a esta toma.`
+                : `${version.duration} s + 10 s → ${version.duration + 10} s. El nuevo clip incluye el vídeo completo.${count > 1 ? " Todos parten de esta misma toma." : ""}`}
+            </span>
+          </div>
+        )}
         <label>
           {mode === "generate"
             ? "¿Qué ocurre en esta toma?"
@@ -653,7 +706,7 @@ function Inspector({
               if (
                 (e.ctrlKey || e.metaKey) &&
                 e.key === "Enter" &&
-                !submitting &&
+                !busy &&
                 !uploading &&
                 (mode === "generate" ? prompt : instruction).trim() &&
                 !needsRecovery
@@ -879,19 +932,36 @@ function Inspector({
         ) : (
           <p className="hint">
             {mode === "edit"
-              ? "Crea una nueva versión a partir de la toma seleccionada. La original se conserva."
-              : `Añade 10 segundos al vídeo seleccionado: ${version?.duration || 0} → ${(version?.duration || 0) + 10} s. Máximo 40 s.`}
+              ? "Crea un clip independiente con los cambios. El vídeo base se conserva."
+              : `Crea un clip de ${baseDuration + 10} s: incluye los ${baseDuration} s originales y 10 s de continuación. Máximo 40 s.`}
           </p>
         )}
-        {!!scene.versions?.length && (
+        {(scene.versions?.length || 0) > 1 && (
           <details className="versions">
             <summary>
               <History size={15} />
-              Versiones <span className="count">{scene.versions.length}</span>
+              Resultados anteriores{" "}
+              <span className="count">{scene.versions!.length}</span>
               <ChevronDown size={14} />
             </summary>
+            <p className="hint">
+              Estos resultados se guardaron juntos con el flujo anterior. Puedes
+              convertirlos en clips independientes.
+            </p>
+            <button
+              className="button full"
+              disabled={!!w.job || !!scene.generation_queue?.length}
+              onClick={() =>
+                void w.action(
+                  () => db.separateVersions(scene.id),
+                  "Resultados separados en clips.",
+                )
+              }
+            >
+              Separar en clips
+            </button>
             <div>
-              {scene.versions.map((v, i) => (
+              {scene.versions!.map((v, i) => (
                 <button
                   key={v.id}
                   className={v.id === version?.id ? "selected-version" : ""}
@@ -919,9 +989,9 @@ function Inspector({
         )}
       </div>
       <div className="generate-footer">
-        {!needsRecovery && (
+        {!needsRecovery && !awaiting && !retryable && (
           <label className="version-count">
-            <span>Versiones a generar</span>
+            <span>Cantidad de clips</span>
             <input
               type="number"
               min={1}
@@ -941,6 +1011,10 @@ function Inspector({
         {!getApiKey() ? (
           <button className="button primary full" onClick={openSettings}>
             Conectar Google para generar
+          </button>
+        ) : awaiting ? (
+          <button className="button primary full" onClick={onGenerationQueued}>
+            Ver progreso en la biblioteca
           </button>
         ) : needsRecovery ? (
           <>
@@ -974,6 +1048,18 @@ function Inspector({
               Descartar seguimiento
             </button>
           </>
+        ) : retryable ? (
+          <button
+            className="button primary full"
+            disabled={submitting}
+            onClick={async () => {
+              setSubmitting(true);
+              if (await w.retry(scene.id)) onGenerationQueued?.();
+              setSubmitting(false);
+            }}
+          >
+            Reintentar clip
+          </button>
         ) : (
           <button
             className="button primary full"
@@ -991,13 +1077,17 @@ function Inspector({
             {submitting
               ? "Añadiendo…"
               : count > 1
-                ? `Generar ${count} versiones`
-                : mode === "edit"
-                  ? "Crear versión editada"
+                ? mode === "edit"
+                  ? `Crear ${count} clips editados`
                   : mode === "extend"
-                    ? "Extender 10 segundos"
+                    ? `Crear ${count} clips extendidos`
+                    : `Generar ${count} clips`
+                : mode === "edit"
+                  ? "Crear clip editado"
+                  : mode === "extend"
+                    ? "Crear clip extendido"
                     : version
-                      ? "Generar otra versión"
+                      ? "Generar nuevo clip"
                       : "Generar escena"}
             <span className="key-hint" aria-hidden="true">
               ⌘ ↵
@@ -1005,10 +1095,16 @@ function Inspector({
           </button>
         )}
         <small>
-          {count > 1
-            ? `${count} solicitudes a Google. Se guardarán como versiones de este clip${mode !== "generate" ? ", todas a partir de la toma seleccionada" : ""}.`
-            : "Cada generación consume tu cuota de Google. Las versiones anteriores se conservan."}{" "}
-          Puedes seguir trabajando mientras avanza la cola.
+          {retryable
+            ? "Se reintentará la solicitud guardada con sus mismos ajustes."
+            : awaiting
+              ? "Este clip se está preparando en segundo plano."
+              : needsRecovery
+                ? "Recuperar consulta la solicitud existente."
+                : `${count || 1} ${(count || 1) === 1 ? "solicitud" : "solicitudes"} a Google. Cada resultado aparecerá como un clip independiente.`}{" "}
+          {version
+            ? "El clip original se conserva."
+            : "Puedes seguir trabajando mientras avanza la cola."}
         </small>
         <button className="text-button" onClick={openSettings}>
           Configurar mi API key

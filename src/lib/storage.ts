@@ -2,6 +2,8 @@ import { openDB, type DBSchema } from "idb";
 import {
   sceneSettings,
   sequenceScenes,
+  activeVersion,
+  sceneBlob,
   type Project,
   type Scene,
   type Asset,
@@ -78,6 +80,118 @@ export async function enqueueGenerations(items: QueuedGeneration[]) {
       generation_queue: [...(scene.generation_queue || []), item],
     });
   }
+  await tx.done;
+}
+// Allocate each output and its queue entry together; no empty clips survive a failed enqueue.
+export async function enqueueClipOutputs(items: QueuedGeneration[]) {
+  const database = await connection;
+  const tx = database.transaction(["scenes", "projects"], "readwrite");
+  const store = tx.objectStore("scenes");
+  const all = await store.getAll();
+  const queued: QueuedGeneration[] = [];
+  for (const item of items) {
+    const source = all.find((s) => s.id === item.sceneId && !s.deleted_at);
+    if (!source) {
+      tx.abort();
+      throw new Error("El clip ya no está disponible.");
+    }
+    const reuse =
+      item.task.mode === "generate" &&
+      !sceneBlob(source) &&
+      !source.task &&
+      !source.generation_queue?.length;
+    const mode = item.task.mode;
+    const number =
+      all.filter(
+        (s) => s.origin?.sceneId === source.id && s.origin.mode === mode,
+      ).length + 1;
+    const label =
+      mode === "edit" ? "Edición" : mode === "extend" ? "Extensión" : "Toma";
+    const target: Scene = reuse
+      ? source
+      : {
+          ...makeScene(
+            source.project_id,
+            Math.max(
+              -1,
+              ...all
+                .filter((s) => s.project_id === source.project_id)
+                .map((s) => s.order),
+            ) + 1,
+            item.task.settings,
+          ),
+          title: `${(source.title || "Clip").slice(0, 40)} · ${label} ${number}`,
+          prompt: mode === "generate" ? item.task.prompt : source.prompt,
+          edit_prompt: mode === "edit" ? item.task.prompt : undefined,
+          extend_prompt: mode === "extend" ? item.task.prompt : undefined,
+          first_frame_asset_id:
+            mode === "generate" ? source.first_frame_asset_id : undefined,
+          last_frame_asset_id:
+            mode === "generate" ? source.last_frame_asset_id : undefined,
+          reference_asset_ids:
+            mode === "generate" ? source.reference_asset_ids : undefined,
+          origin: {
+            sceneId: source.id,
+            versionId: activeVersion(source)?.id,
+            title: source.title || "Clip",
+            mode,
+          },
+        };
+    const request = { ...item, sceneId: target.id };
+    target.output_request = { task: item.task, images: item.images };
+    target.generation_queue = [request];
+    await store.put(target);
+    if (!reuse) all.push(target);
+    const project = await tx.objectStore("projects").get(source.project_id);
+    if (project)
+      await tx.objectStore("projects").put({ ...project, updated_at: now() });
+    queued.push(request);
+  }
+  await tx.done;
+  return queued;
+}
+
+export async function separateVersions(sceneId: string) {
+  const database = await connection;
+  const tx = database.transaction("scenes", "readwrite");
+  const source = await tx.store.get(sceneId);
+  if (
+    !source ||
+    source.deleted_at ||
+    source.task ||
+    source.generation_queue?.length
+  )
+    throw new Error("Espera a que termine la generación de este clip.");
+  const selected = activeVersion(source);
+  if (!selected || (source.versions?.length || 0) < 2) {
+    await tx.done;
+    return;
+  }
+  const all = await tx.store.index("by-project").getAll(source.project_id);
+  let order = Math.max(...all.map((s) => s.order));
+  for (const [index, version] of source.versions!.entries()) {
+    if (version.id === selected.id) continue;
+    const clip = makeScene(source.project_id, ++order, version.settings);
+    await tx.store.put({
+      ...clip,
+      title: `${(source.title || "Clip").slice(0, 40)} · Toma ${index + 1}`,
+      prompt: version.prompt,
+      versions: [version],
+      active_version_id: version.id,
+      status: "completed",
+      origin: {
+        sceneId,
+        versionId: version.id,
+        title: source.title || "Clip",
+        mode: version.mode,
+      },
+    });
+  }
+  await tx.store.put({
+    ...source,
+    versions: [selected],
+    active_version_id: selected.id,
+  });
   await tx.done;
 }
 export async function startQueuedGeneration(item: QueuedGeneration) {

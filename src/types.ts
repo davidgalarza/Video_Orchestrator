@@ -91,6 +91,13 @@ export interface Scene {
   active_version_id?: string;
   task?: GenerationTask;
   generation_queue?: QueuedGeneration[];
+  output_request?: Pick<QueuedGeneration, "task" | "images">;
+  origin?: {
+    sceneId: string;
+    versionId?: string;
+    title: string;
+    mode: GenerationMode;
+  };
   error?: string;
   video_blob?: Blob;
   created_at: string;

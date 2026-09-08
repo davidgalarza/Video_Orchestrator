@@ -300,7 +300,7 @@ export function StudioApp() {
                   : "Cola pausada"}
               </strong>
               <small>
-                {w.job ? `Versión ${w.job.index} de ${w.job.total} · ` : ""}
+                {w.job ? `Clip ${w.job.index} de ${w.job.total} · ` : ""}
                 {w.queue.length} en espera · Mantén esta pestaña abierta
               </small>
             </span>

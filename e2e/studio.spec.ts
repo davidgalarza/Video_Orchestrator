@@ -32,13 +32,19 @@ async function createProject(page: Page, sceneCount = 1) {
   }
 }
 
-async function reopenReady(page: Page, version = 1) {
+async function reopenReady(page: Page, title = "Primera escena") {
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(
-    page.locator(".project-clip").first().locator(".clip-version"),
-  ).toContainText(`V${version}`, { timeout: 15000 });
+  const card = page.locator(".project-clip").filter({
+    has: page.getByRole("button", {
+      name: `Abrir clip: ${title}`,
+      exact: true,
+    }),
+  });
+  await expect(card.locator(".clip-title [role=status]")).toHaveText("Listo", {
+    timeout: 15000,
+  });
   await page
-    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .getByRole("button", { name: `Abrir clip: ${title}`, exact: true })
     .click();
 }
 
@@ -133,9 +139,9 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await page
     .getByLabel("¿Qué quieres cambiar?")
     .fill("Una iluminación más cálida.");
-  await page.getByRole("button", { name: "Crear versión editada" }).click();
-  await reopenReady(page, 2);
-  await expect(page.locator(".preview-meta")).toContainText("Versión 2", {
+  await page.getByRole("button", { name: "Crear clip editado" }).click();
+  await reopenReady(page, "Primera escena · Edición 1");
+  await expect(page.locator(".preview-meta")).toContainText("Clip listo", {
     timeout: 15000,
   });
   expect(bodies[1]).toMatchObject({ previous_interaction_id: "op-1" });
@@ -144,10 +150,10 @@ test("editor workflow: key, blank project, references, versions, persistence and
     .getByLabel("¿Cómo continúa la escena?")
     .fill("La cámara retrocede lentamente.");
   await page
-    .getByRole("button", { name: "Extender 10 segundos", exact: true })
+    .getByRole("button", { name: "Crear clip extendido", exact: true })
     .click();
-  await reopenReady(page, 3);
-  await expect(page.locator(".preview-meta")).toContainText("Versión 3", {
+  await reopenReady(page, "Primera escena · Edición 1 · Extensión 1");
+  await expect(page.locator(".preview-meta")).toContainText("Clip listo", {
     timeout: 15000,
   });
   expect(bodies[2]).toMatchObject({
@@ -169,9 +175,8 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await expect(page.getByLabel("Nombre del proyecto")).toHaveValue(
     "Secuencia de prueba",
   );
-  await page.locator(".versions summary").click();
-  await page.getByRole("button", { name: /V1.*Generación/ }).click();
-  await expect(page.locator(".preview-meta")).toContainText("Versión 1");
+  await expect(page.locator(".versions")).toHaveCount(0);
+  await expect(page.locator(".project-clip")).toHaveCount(3);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect
     .poll(() =>
@@ -706,14 +711,14 @@ test("edit instructions persist and mobile switches between configuration and th
   await page.getByRole("button", { name: "Configurar", exact: true }).click();
   await expect(page.getByLabel("¿Cómo continúa la escena?")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Extender 10 segundos", exact: true }),
+    page.getByRole("button", { name: "Crear clip extendido", exact: true }),
   ).toBeInViewport();
   await page.screenshot({ path: "artifacts/ux-mobile-configure.png" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: "artifacts/ux-desktop-clip.png" });
 });
 
-test("background queue accepts more clips, preserves snapshots and creates N versions from the selected take", async ({
+test("background queue accepts more clips, preserves snapshots and creates independent clips and edits from the selected take", async ({
   page,
 }) => {
   const bodies: Record<string, unknown>[] = [];
@@ -745,15 +750,15 @@ test("background queue accepts more clips, preserves snapshots and creates N ver
   });
   await page.goto("/");
   await createProject(page);
-  await page.getByLabel("Versiones a generar").fill("3");
+  await page.getByLabel("Cantidad de clips").fill("3");
   await page
-    .getByRole("button", { name: "Generar 3 versiones", exact: true })
+    .getByRole("button", { name: "Generar 3 clips", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".clip-generation")).toContainText(
-    "Versión 1 de 3",
+  await expect(page.locator(".clip-generation").first()).toContainText(
+    "Clip 1 de 3",
   );
-  await expect(page.locator(".clip-generation")).toContainText("2 en espera");
+  await expect(page.locator(".job-bar")).toContainText("2 en espera");
   await page.getByRole("button", { name: "Nuevo clip", exact: true }).click();
   await page
     .getByLabel("¿Qué ocurre en esta toma?")
@@ -786,30 +791,29 @@ test("background queue accepts more clips, preserves snapshots and creates N ver
   expect(bodies).toHaveLength(4);
   expect(bodies[0]).toEqual(bodies[1]);
   expect(bodies[1]).toEqual(bodies[2]);
-  await expect(page.locator(".project-clip").first()).toContainText(
-    "3 versiones",
-  );
+  await expect(page.locator(".project-clip")).toHaveCount(4);
+  await expect(
+    page.locator(".project-clip .clip-title [role=status]"),
+  ).toHaveText(["Listo", "Listo", "Listo", "Listo"]);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
-  await page.locator(".versions summary").click();
-  await page.getByRole("button", { name: /V1.*Generación/ }).click();
   await page.getByLabel("¿Qué quieres cambiar?").fill("Cambia la luz.");
-  await page.getByLabel("Versiones a generar").fill("2");
+  await page.getByLabel("Cantidad de clips").fill("2");
   await page
-    .getByRole("button", { name: "Generar 2 versiones", exact: true })
+    .getByRole("button", { name: "Crear 2 clips editados", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".project-clip").first()).toContainText(
-    "5 versiones",
-    { timeout: 20000 },
-  );
+  await expect(page.locator(".project-clip")).toHaveCount(6);
+  await expect(
+    page.locator(".project-clip").last().locator(".clip-title [role=status]"),
+  ).toHaveText("Listo", { timeout: 20000 });
   expect(bodies[4]).toMatchObject({ previous_interaction_id: "batch-1" });
   expect(bodies[5]).toMatchObject({ previous_interaction_id: "batch-1" });
 });
 
-test("waiting versions survive pause and reload and can be cancelled without new paid requests", async ({
+test("waiting clips survive pause and reload and can be cancelled without new paid requests", async ({
   page,
 }) => {
   let posts = 0;
@@ -824,12 +828,12 @@ test("waiting versions survive pause and reload and can be cancelled without new
   });
   await page.goto("/");
   await createProject(page);
-  await page.getByLabel("Versiones a generar").fill("3");
+  await page.getByLabel("Cantidad de clips").fill("3");
   await page
-    .getByRole("button", { name: "Generar 3 versiones", exact: true })
+    .getByRole("button", { name: "Generar 3 clips", exact: true })
     .click();
   await expect.poll(() => posts).toBe(1);
-  await expect(page.locator(".clip-generation")).toContainText("2 en espera");
+  await expect(page.locator(".job-bar")).toContainText("2 en espera");
   await page
     .getByRole("button", {
       name: "Pausar seguimiento de la generación",
@@ -840,17 +844,16 @@ test("waiting versions survive pause and reload and can be cancelled without new
     page.getByRole("button", { name: "Continuar cola", exact: true }),
   ).toBeVisible();
   await page.reload();
-  await expect(page.locator(".clip-generation")).toContainText(
-    "2 en espera · Cola pausada",
-  );
+  await expect(page.locator(".job-bar")).toContainText("2 en espera");
+  await expect(page.locator(".job-bar")).toContainText("Cola pausada");
   expect(posts).toBe(1);
   await page
-    .getByRole("button", { name: "Continuar cola", exact: true })
+    .getByRole("button", { name: "Cancelar pendientes", exact: true })
+    .first()
     .click();
-  await expect(page.getByRole("alert")).toContainText(
-    "Recupera el resultado pendiente",
-  );
-  expect(posts).toBe(1);
+  await expect(
+    page.getByRole("button", { name: "Cancelar pendientes", exact: true }),
+  ).toHaveCount(1);
   await page
     .getByRole("button", { name: "Cancelar pendientes", exact: true })
     .click();
@@ -863,7 +866,7 @@ test("waiting versions survive pause and reload and can be cancelled without new
   expect(posts).toBe(1);
 });
 
-test("recovering an interrupted batch resumes its remaining versions exactly once", async ({
+test("recovering an interrupted batch resumes its remaining clips exactly once", async ({
   page,
 }) => {
   let posts = 0,
@@ -890,9 +893,9 @@ test("recovering an interrupted batch resumes its remaining versions exactly onc
   });
   await page.goto("/");
   await createProject(page);
-  await page.getByLabel("Versiones a generar").fill("3");
+  await page.getByLabel("Cantidad de clips").fill("3");
   await page
-    .getByRole("button", { name: "Generar 3 versiones", exact: true })
+    .getByRole("button", { name: "Generar 3 clips", exact: true })
     .click();
   await expect.poll(() => posts).toBe(1);
   await page
@@ -909,10 +912,125 @@ test("recovering an interrupted batch resumes its remaining versions exactly onc
   await page
     .getByRole("button", { name: "Recuperar resultado", exact: true })
     .click();
-  await expect(page.locator(".project-clip").first()).toContainText(
-    "3 versiones",
-    { timeout: 15000 },
-  );
+  await expect(
+    page.locator(".project-clip .clip-title [role=status]"),
+  ).toHaveText(["Listo", "Listo", "Listo"], { timeout: 15000 });
   await expect(page.locator(".job-bar")).toHaveCount(0);
   expect(posts).toBe(3);
+});
+
+test("failed edits retry into the same derived clip and keep their original input", async ({
+  page,
+}) => {
+  const bodies: Record<string, unknown>[] = [];
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, (route) => {
+    bodies.push(route.request().postDataJSON());
+    if (bodies.length === 2)
+      return route.fulfill({
+        status: 429,
+        json: { error: { message: "Quota exceeded" } },
+      });
+    return route.fulfill({
+      json: {
+        id: `retry-${bodies.length}`,
+        status: "completed",
+        steps: [
+          { type: "model_output", content: [{ type: "video", data: clip }] },
+        ],
+      },
+    });
+  });
+  await page.goto("/");
+  await createProject(page);
+  await page
+    .getByRole("button", { name: "Generar escena", exact: true })
+    .click();
+  await reopenReady(page);
+  await page.getByLabel("¿Qué quieres cambiar?").fill("Luz más cálida.");
+  await page
+    .getByRole("button", { name: "Crear clip editado", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+  await expect(page.locator(".project-clip").last()).toContainText("Revisar");
+  await expect(page.locator(".project-clip").first()).toContainText("Listo");
+  await page
+    .getByRole("button", { name: "Reintentar clip", exact: true })
+    .click();
+  await expect(
+    page.locator(".project-clip").last().locator(".clip-title [role=status]"),
+  ).toHaveText("Listo");
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+  expect(bodies[1]).toEqual(bodies[2]);
+  expect(bodies[2]).toMatchObject({ previous_interaction_id: "retry-1" });
+  await page
+    .locator(".project-clip")
+    .last()
+    .getByRole("button", { name: "Ver origen", exact: true })
+    .click();
+  await expect(page.getByLabel("Nombre de la escena")).toHaveValue(
+    "Primera escena",
+  );
+});
+
+test("existing grouped results can be separated into independently downloadable clips", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await createProject(page);
+  await page.evaluate(async (data) => {
+    const database = await new Promise<IDBDatabase>((resolve) => {
+      const req = indexedDB.open("vid-gen-studio", 1);
+      req.onsuccess = () => resolve(req.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = database.transaction("scenes", "readwrite");
+      const req = tx.objectStore("scenes").getAll();
+      req.onsuccess = () => {
+        const scene = req.result[0];
+        const versions = ["old-1", "old-2"].map((id) => ({
+          id,
+          prompt: "Paisaje",
+          settings: scene.settings,
+          mode: "generate",
+          duration: 8,
+          created_at: "today",
+          blob: new Blob(
+            [Uint8Array.from(atob(data), (c) => c.charCodeAt(0))],
+            { type: "video/mp4" },
+          ),
+        }));
+        tx.objectStore("scenes").put({
+          ...scene,
+          versions,
+          active_version_id: "old-2",
+          status: "completed",
+        });
+      };
+      tx.oncomplete = () => resolve();
+    });
+    database.close();
+  }, clip);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await page.locator(".versions summary").click();
+  await page
+    .getByRole("button", { name: "Separar en clips", exact: true })
+    .click();
+  await expect(page.locator(".versions")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+  await expect(
+    page.locator(".project-clip .clip-title [role=status]"),
+  ).toHaveText(["Listo", "Listo"]);
+  await page.getByLabel("Seleccionar clips visibles", { exact: true }).check();
+  await expect(
+    page.getByRole("button", { name: /Descargar seleccionados/ }),
+  ).toBeEnabled();
 });
