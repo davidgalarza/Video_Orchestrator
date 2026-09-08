@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
+  Copy,
+  Trash2,
   Download,
   Film,
   Layers,
@@ -9,6 +11,7 @@ import {
   Play,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import {
   activeVersion,
@@ -96,16 +99,14 @@ export function ProjectWorkspace({
       setPacking(false);
     }
   };
-  if (view !== "clips")
+  if (view === "sequence")
     return (
       <>
         <div className="workspace-navigation">
           <button className="text-button" onClick={() => setView("clips")}>
             <ArrowLeft size={16} /> Todos los clips
           </button>
-          <span>
-            {view === "sequence" ? "Montaje de secuencia" : "Editar clip"}
-          </span>
+          <span>Montaje de secuencia</span>
         </div>
         <Editor
           key={`${view}-${editing}`}
@@ -351,13 +352,43 @@ export function ProjectWorkspace({
                         {references.length} referencias ·{" "}
                         {scene.versions?.length || (blob ? 1 : 0)} versiones
                       </span>
-                      <IconButton
-                        label={`Descargar clip: ${scene.title || "Sin título"}`}
-                        disabled={!blob}
-                        onClick={() => downloadBlob(blob!, clipFilename(scene))}
-                      >
-                        <Download size={16} />
-                      </IconButton>
+                      <div className="inline">
+                        <IconButton
+                          label={`Duplicar clip: ${scene.title || "Sin título"}`}
+                          disabled={!!w.job}
+                          onClick={() =>
+                            void w.action(async () => {
+                              const copy = await db.duplicateScene(scene.id);
+                              openClip(copy.id);
+                            })
+                          }
+                        >
+                          <Copy size={15} />
+                        </IconButton>
+                        <IconButton
+                          label={`Eliminar clip: ${scene.title || "Sin título"}`}
+                          disabled={!!w.job}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "¿Eliminar este clip y sus versiones guardadas?",
+                              )
+                            )
+                              void w.action(() => db.deleteScene(scene.id));
+                          }}
+                        >
+                          <Trash2 size={15} />
+                        </IconButton>
+                        <IconButton
+                          label={`Descargar clip: ${scene.title || "Sin título"}`}
+                          disabled={!blob}
+                          onClick={() =>
+                            downloadBlob(blob!, clipFilename(scene))
+                          }
+                        >
+                          <Download size={16} />
+                        </IconButton>
+                      </div>
                     </div>
                     {sequence.some((s) => s.id === scene.id) && (
                       <span className="clip-in-sequence">
@@ -390,6 +421,75 @@ export function ProjectWorkspace({
           </Empty>
         )}
       </div>
+      {view === "edit" && scenes.some((s) => s.id === editing) && (
+        <ClipDialog onClose={() => setView("clips")} workspace={w}>
+          <Editor
+            key={editing}
+            project={project}
+            workspace={w}
+            settings={settings}
+            initialSceneId={editing}
+            clipOnly
+            browseClips={() => setView("clips")}
+          />
+        </ClipDialog>
+      )}
     </div>
+  );
+}
+
+function ClipDialog({
+  children,
+  onClose,
+  workspace: w,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  workspace: WorkspaceController;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const element = dialog.current!;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    element.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      element.close();
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="clip-dialog"
+      aria-labelledby="clip-dialog-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <header className="clip-dialog-header">
+        <div>
+          <h2 id="clip-dialog-title">Generar y editar clip</h2>
+          <p>Prompt, referencias y versiones de un solo vídeo.</p>
+        </div>
+        <IconButton label="Cerrar editor de clip" onClick={onClose}>
+          <X size={20} />
+        </IconButton>
+      </header>
+      {w.notice?.error && (
+        <div className="clip-dialog-notice" role="alert">
+          {w.notice.text}
+        </div>
+      )}
+      <div className="clip-dialog-body">{children}</div>
+      <div className="clip-dialog-footnote">
+        {w.job
+          ? "La generación continúa aunque cierres esta ventana."
+          : "Los cambios se guardan automáticamente en el proyecto."}
+      </div>
+    </dialog>
   );
 }

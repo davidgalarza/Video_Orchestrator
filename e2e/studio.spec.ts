@@ -18,9 +18,12 @@ async function createProject(page: Page, sceneCount = 1) {
   for (let i = 0; i < sceneCount; i++) {
     if (i) {
       await page
-        .getByRole("button", { name: "Añadir escena", exact: true })
+        .getByRole("button", { name: "Cerrar editor de clip", exact: true })
         .click();
-      await expect(page.locator(".scene-card")).toHaveCount(i + 1);
+      await page
+        .getByRole("button", { name: "Nuevo clip", exact: true })
+        .click();
+      await expect(page.locator(".project-clip")).toHaveCount(i + 1);
     }
     await page
       .getByLabel("¿Qué ocurre en esta toma?")
@@ -82,8 +85,13 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await expect(page.getByLabel("Nombre de la escena")).toHaveValue(
     "Primera escena",
   );
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
   await page.getByLabel("Nombre del proyecto").fill("Secuencia de prueba");
-  await page.getByLabel("Nombre de la escena").click();
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
   await page
     .getByLabel("Subir fotograma inicial", { exact: true })
     .setInputFiles("e2e/fixtures/reference.png");
@@ -93,10 +101,7 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await page
     .getByLabel("Fotograma final", { exact: true })
     .selectOption({ label: "reference.png" });
-  await page
-    .locator(".toast .icon-button")
-    .click()
-    .catch(() => undefined);
+
   await page.screenshot({
     path: "artifacts/editor-desktop.png",
     fullPage: true,
@@ -168,6 +173,9 @@ test("editor workflow: key, blank project, references, versions, persistence and
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
   await page.getByRole("button", { name: "Abrir menú", exact: true }).click();
   await page.getByRole("button", { name: "Mis proyectos" }).click();
   await expect(
@@ -247,13 +255,21 @@ test("queue stops on quota failure and leaves remaining scenes as drafts", async
   });
   await page.goto("/");
   await createProject(page, 3);
-  await page.locator(".scene-card").first().click();
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
   await page.getByRole("button", { name: /Generar pendientes/ }).click();
-  await expect(page.locator(".inline-error")).toContainText("cuota");
+  await expect(
+    page.locator(".project-clip").filter({ hasText: "Revisar" }),
+  ).toHaveCount(1);
   expect(posts).toBe(1);
   await expect(
-    page.locator(".scene-card").filter({ hasText: "Borrador" }),
+    page.locator(".project-clip").filter({ hasText: "Borrador" }),
   ).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await expect(page.locator(".inline-error")).toContainText("cuota");
 });
 
 test("exports mixed silent/audio clips in a single playable MP4 using the local engine", async ({
@@ -480,4 +496,63 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
     .getByRole("button", { name: "Todos los clips", exact: true })
     .click();
   await expect(page.locator(".project-clip")).toHaveCount(3);
+});
+
+test("new clips open a focused modal, save drafts and return focus to the library", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await createProject(page);
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Nuevo clip", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Generar y editar clip" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".storyboard")).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "Exportar vídeo", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("¿Qué ocurre en esta toma?")
+    .fill("Una nube cruza el cielo.");
+  await page.getByLabel("Nombre de la escena").click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Nuevo clip", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page
+      .locator(".project-clip")
+      .filter({ hasText: "Una nube cruza el cielo." }),
+  ).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Abrir clip: Escena 2", exact: true })
+    .click();
+  await expect(page.getByLabel("¿Qué ocurre en esta toma?")).toHaveValue(
+    "Una nube cruza el cielo.",
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(
+    dialog.getByRole("button", { name: "Generar escena", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({
+    path: "artifacts/clip-dialog-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    dialog.getByRole("button", { name: "Generar escena", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({
+    path: "artifacts/clip-dialog-mobile.png",
+    fullPage: true,
+  });
+  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+    true,
+  );
+  await expect(
+    page.getByRole("button", { name: "Cerrar editor de clip", exact: true }),
+  ).toBeInViewport();
 });

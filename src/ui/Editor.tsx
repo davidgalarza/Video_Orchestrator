@@ -42,6 +42,7 @@ export function Editor({
   initialSceneId = "",
   sequenceMode = false,
   browseClips,
+  clipOnly = false,
 }: {
   project: Project;
   workspace: WorkspaceController;
@@ -49,6 +50,7 @@ export function Editor({
   initialSceneId?: string;
   sequenceMode?: boolean;
   browseClips: () => void;
+  clipOnly?: boolean;
 }) {
   const allScenes = w.scenes.filter((s) => s.project_id === project.id);
   const scenes = sequenceMode ? sequenceScenes(project, allScenes) : allScenes;
@@ -132,54 +134,56 @@ export function Editor({
   };
   return (
     <div className="editor">
-      <div className="editor-top">
-        <div className="project-title">
-          <input
-            key={project.id}
-            defaultValue={project.name}
-            aria-label="Nombre del proyecto"
-            maxLength={80}
-            onBlur={(e) => {
-              if (!e.target.value.trim()) e.target.value = project.name;
-              else
-                void w.action(() =>
-                  db.renameProject(project.id, e.target.value),
-                );
-            }}
-          />
-          <span>
-            <Check size={12} />
-            Guardado en este navegador
-          </span>
-        </div>
-        <div className="inline">
-          <button
-            className="button compact"
-            disabled={!pending.length || busy}
-            onClick={() => void w.run(pending.map((s) => s.id))}
-          >
-            <Play size={14} />
-            Generar pendientes
-            {pending.length > 0 && (
-              <span className="count">{pending.length}</span>
-            )}
-          </button>
-          {sequenceMode && (
+      {!clipOnly && (
+        <div className="editor-top">
+          <div className="project-title">
+            <input
+              key={project.id}
+              defaultValue={project.name}
+              aria-label="Nombre del proyecto"
+              maxLength={80}
+              onBlur={(e) => {
+                if (!e.target.value.trim()) e.target.value = project.name;
+                else
+                  void w.action(() =>
+                    db.renameProject(project.id, e.target.value),
+                  );
+              }}
+            />
+            <span>
+              <Check size={12} />
+              Guardado en este navegador
+            </span>
+          </div>
+          <div className="inline">
             <button
-              className="button primary compact"
-              disabled={!ready.length || exporting || busy}
-              onClick={() => void exportVideo()}
+              className="button compact"
+              disabled={!pending.length || busy}
+              onClick={() => void w.run(pending.map((s) => s.id))}
             >
-              {exporting ? (
-                <LoaderCircle size={15} className="spin" />
-              ) : (
-                <Download size={15} />
+              <Play size={14} />
+              Generar pendientes
+              {pending.length > 0 && (
+                <span className="count">{pending.length}</span>
               )}
-              <span>{exporting ? "Exportando…" : "Exportar vídeo"}</span>
             </button>
-          )}
+            {sequenceMode && (
+              <button
+                className="button primary compact"
+                disabled={!ready.length || exporting || busy}
+                onClick={() => void exportVideo()}
+              >
+                {exporting ? (
+                  <LoaderCircle size={15} className="spin" />
+                ) : (
+                  <Download size={15} />
+                )}
+                <span>{exporting ? "Exportando…" : "Exportar vídeo"}</span>
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       {scene ? (
         <div className="editor-body">
           <div className="preview-column">
@@ -273,162 +277,164 @@ export function Editor({
                 Descargar clip
               </button>
             </div>
-            <div className="storyboard">
-              <div className="section-heading">
-                <div>
-                  <h2>
-                    {sequenceMode ? "Tu secuencia" : "Clips del proyecto"}{" "}
-                    <span className="count">{scenes.length}</span>
-                  </h2>
-                  <span>
-                    {sequenceMode ? `${total} s` : `${scenes.length} clips`}{" "}
-                    {sequenceMode
-                      ? ready.length < scenes.length
-                        ? "previstos"
-                        : "de secuencia"
-                      : ""}{" "}
-                    · {ready.length} escenas listas
-                  </span>
-                </div>
-                <AddButton
-                  onClick={sequenceMode ? browseClips : () => void add()}
-                >
-                  {sequenceMode ? "Elegir clips" : "Añadir escena"}
-                </AddButton>
-              </div>
-              <div className="scene-strip" aria-label="Escenas del proyecto">
-                {scenes.map((s, i) => (
-                  <button
-                    key={s.id}
-                    className={`scene-card ${scene.id === s.id ? "is-selected" : ""}`}
-                    onClick={() => setSelectedId(s.id)}
-                    aria-pressed={scene.id === s.id}
+            {!clipOnly && (
+              <div className="storyboard">
+                <div className="section-heading">
+                  <div>
+                    <h2>
+                      {sequenceMode ? "Tu secuencia" : "Clips del proyecto"}{" "}
+                      <span className="count">{scenes.length}</span>
+                    </h2>
+                    <span>
+                      {sequenceMode ? `${total} s` : `${scenes.length} clips`}{" "}
+                      {sequenceMode
+                        ? ready.length < scenes.length
+                          ? "previstos"
+                          : "de secuencia"
+                        : ""}{" "}
+                      · {ready.length} escenas listas
+                    </span>
+                  </div>
+                  <AddButton
+                    onClick={sequenceMode ? browseClips : () => void add()}
                   >
-                    <div className="scene-thumb">
-                      {sceneBlob(s) ? (
-                        <Clip blob={sceneBlob(s)} controls={false} />
-                      ) : w.assets.find(
-                          (a) => a.id === s.first_frame_asset_id,
-                        ) ? (
-                        <img
-                          src={
-                            w.assets.find(
-                              (a) => a.id === s.first_frame_asset_id,
-                            )!.data_url
-                          }
-                          alt=""
-                        />
-                      ) : (
-                        <span className="scene-number">
-                          {String(i + 1).padStart(2, "0")}
+                    {sequenceMode ? "Elegir clips" : "Añadir escena"}
+                  </AddButton>
+                </div>
+                <div className="scene-strip" aria-label="Escenas del proyecto">
+                  {scenes.map((s, i) => (
+                    <button
+                      key={s.id}
+                      className={`scene-card ${scene.id === s.id ? "is-selected" : ""}`}
+                      onClick={() => setSelectedId(s.id)}
+                      aria-pressed={scene.id === s.id}
+                    >
+                      <div className="scene-thumb">
+                        {sceneBlob(s) ? (
+                          <Clip blob={sceneBlob(s)} controls={false} />
+                        ) : w.assets.find(
+                            (a) => a.id === s.first_frame_asset_id,
+                          ) ? (
+                          <img
+                            src={
+                              w.assets.find(
+                                (a) => a.id === s.first_frame_asset_id,
+                              )!.data_url
+                            }
+                            alt=""
+                          />
+                        ) : (
+                          <span className="scene-number">
+                            {String(i + 1).padStart(2, "0")}
+                          </span>
+                        )}
+                        <span className="scene-duration">
+                          {activeVersion(s)?.duration ||
+                            sceneSettings(s).duration}
+                          s
                         </span>
-                      )}
-                      <span className="scene-duration">
-                        {activeVersion(s)?.duration ||
-                          sceneSettings(s).duration}
-                        s
-                      </span>
-                      {w.job?.sceneId === s.id && (
-                        <LoaderCircle
-                          className="spin scene-processing"
-                          size={18}
-                        />
-                      )}
-                    </div>
-                    <div className="scene-caption">
-                      <strong>{s.title || `Escena ${i + 1}`}</strong>
-                      <small
-                        className={
-                          s.error
-                            ? "warning-text"
+                        {w.job?.sceneId === s.id && (
+                          <LoaderCircle
+                            className="spin scene-processing"
+                            size={18}
+                          />
+                        )}
+                      </div>
+                      <div className="scene-caption">
+                        <strong>{s.title || `Escena ${i + 1}`}</strong>
+                        <small
+                          className={
+                            s.error
+                              ? "warning-text"
+                              : sceneBlob(s)
+                                ? "success-text"
+                                : ""
+                          }
+                        >
+                          {s.error
+                            ? "Revisar"
                             : sceneBlob(s)
-                              ? "success-text"
-                              : ""
-                        }
-                      >
-                        {s.error
-                          ? "Revisar"
-                          : sceneBlob(s)
-                            ? "Lista"
-                            : "Borrador"}
-                      </small>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="scene-actions">
-                <span>
-                  Escena {scenes.indexOf(scene) + 1} de {scenes.length}
-                </span>
-                <div className="inline">
-                  {sequenceMode && (
-                    <>
-                      <IconButton
-                        label="Mover escena a la izquierda"
-                        disabled={busy || scenes[0].id === scene.id}
-                        onClick={() => move(-1)}
-                      >
-                        <ArrowLeft size={15} />
-                      </IconButton>
-                      <IconButton
-                        label="Mover escena a la derecha"
-                        disabled={busy || scenes.at(-1)?.id === scene.id}
-                        onClick={() => move(1)}
-                      >
-                        <ArrowRight size={15} />
-                      </IconButton>
-                      <button
-                        className="text-button"
-                        disabled={busy}
-                        onClick={() =>
-                          void w.action(() =>
-                            db.saveSequence(
-                              project.id,
-                              scenes
-                                .filter((s) => s.id !== scene.id)
-                                .map((s) => s.id),
-                            ),
+                              ? "Lista"
+                              : "Borrador"}
+                        </small>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="scene-actions">
+                  <span>
+                    Escena {scenes.indexOf(scene) + 1} de {scenes.length}
+                  </span>
+                  <div className="inline">
+                    {sequenceMode && (
+                      <>
+                        <IconButton
+                          label="Mover escena a la izquierda"
+                          disabled={busy || scenes[0].id === scene.id}
+                          onClick={() => move(-1)}
+                        >
+                          <ArrowLeft size={15} />
+                        </IconButton>
+                        <IconButton
+                          label="Mover escena a la derecha"
+                          disabled={busy || scenes.at(-1)?.id === scene.id}
+                          onClick={() => move(1)}
+                        >
+                          <ArrowRight size={15} />
+                        </IconButton>
+                        <button
+                          className="text-button"
+                          disabled={busy}
+                          onClick={() =>
+                            void w.action(() =>
+                              db.saveSequence(
+                                project.id,
+                                scenes
+                                  .filter((s) => s.id !== scene.id)
+                                  .map((s) => s.id),
+                              ),
+                            )
+                          }
+                        >
+                          Quitar de secuencia
+                        </button>
+                      </>
+                    )}
+                    <IconButton
+                      label="Duplicar escena"
+                      disabled={busy}
+                      onClick={() =>
+                        void w.action(async () => {
+                          const copy = await db.duplicateScene(scene.id);
+                          if (sequenceMode)
+                            await db.saveSequence(project.id, [
+                              ...scenes.map((s) => s.id),
+                              copy.id,
+                            ]);
+                          setSelectedId(copy.id);
+                        })
+                      }
+                    >
+                      <Copy size={15} />
+                    </IconButton>
+                    <IconButton
+                      label="Eliminar escena"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            "¿Eliminar esta escena y sus versiones guardadas?",
                           )
-                        }
-                      >
-                        Quitar de secuencia
-                      </button>
-                    </>
-                  )}
-                  <IconButton
-                    label="Duplicar escena"
-                    disabled={busy}
-                    onClick={() =>
-                      void w.action(async () => {
-                        const copy = await db.duplicateScene(scene.id);
-                        if (sequenceMode)
-                          await db.saveSequence(project.id, [
-                            ...scenes.map((s) => s.id),
-                            copy.id,
-                          ]);
-                        setSelectedId(copy.id);
-                      })
-                    }
-                  >
-                    <Copy size={15} />
-                  </IconButton>
-                  <IconButton
-                    label="Eliminar escena"
-                    disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "¿Eliminar esta escena y sus versiones guardadas?",
                         )
-                      )
-                        void w.action(() => db.deleteScene(scene.id));
-                    }}
-                  >
-                    <Trash2 size={15} />
-                  </IconButton>
+                          void w.action(() => db.deleteScene(scene.id));
+                      }}
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
           <Inspector
             key={scene.id}

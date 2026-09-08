@@ -2135,3 +2135,148 @@ button {
     flex-wrap: wrap;
   }
 }
+
+.clip-dialog {
+  width: min(1080px, calc(100vw - 48px));
+  max-width: none;
+  max-height: 92dvh;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+.clip-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.clip-dialog::backdrop {
+  background: #000b;
+}
+.clip-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.clip-dialog-header h2 {
+  font-size: 1.15rem;
+}
+.clip-dialog-header p {
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+.clip-dialog-header .icon-button {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.clip-dialog-body {
+  overflow: auto;
+  min-height: 0;
+}
+.clip-dialog .editor {
+  height: auto;
+  min-height: 0;
+}
+.clip-dialog .editor-body {
+  height: min(720px, calc(92dvh - 125px));
+  min-height: 0;
+}
+.clip-dialog .preview-column {
+  min-height: 0;
+}
+.clip-dialog .inspector {
+  flex-basis: 390px;
+}
+.clip-dialog .inspector-content {
+  min-height: 0;
+}
+.clip-dialog .stage {
+  min-height: 200px;
+}
+.clip-dialog .preview-frame.portrait {
+  max-height: 430px;
+}
+.clip-dialog-footnote {
+  border-top: 1px solid var(--line);
+  padding: 10px 24px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.clip-dialog-notice {
+  padding: 10px 24px;
+  font-size: 0.82rem;
+  color: var(--warning);
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .clip-dialog {
+    width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+  }
+  .clip-dialog-header {
+    padding: 14px 18px;
+  }
+  .clip-dialog-header p {
+    max-width: 240px;
+    line-height: 1.5;
+  }
+  .clip-dialog .editor-body {
+    height: auto;
+  }
+  .clip-dialog .inspector {
+    order: -1;
+    flex-basis: auto;
+    border-top: 0;
+  }
+  .clip-dialog .inspector-heading {
+    display: none;
+  }
+  .clip-dialog .inspector-content {
+    overflow: visible;
+  }
+  .clip-dialog .preview-column {
+    border-top: 1px solid var(--line);
+  }
+  .clip-dialog-footnote {
+    padding: 10px 18px;
+  }
+}
+.clip-dialog .editor {
+  height: min(720px, calc(92dvh - 125px));
+}
+.clip-dialog .editor-body {
+  height: auto;
+}
+.clip-dialog .inspector {
+  min-height: 0;
+}
+.clip-dialog .generate-footer {
+  flex-shrink: 0;
+}
+@media (max-width: 760px) {
+  .clip-dialog .editor {
+    height: auto;
+    padding-bottom: 130px;
+  }
+  .clip-dialog .generate-footer {
+    position: fixed;
+    bottom: 36px;
+    left: 0;
+    right: 0;
+    z-index: 2;
+  }
+  .clip-dialog .inspector-content {
+    padding-bottom: 30px;
+  }
+}
