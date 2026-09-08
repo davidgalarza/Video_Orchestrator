@@ -82,7 +82,12 @@ export function ProjectWorkspace({
     (s) => !visible.some((v) => v.id === s.id),
   ).length;
   const pending = (selected.length ? selected : scenes).filter(
-    (s) => !sceneBlob(s) && s.prompt.trim() && !s.task?.remoteId,
+    (s) =>
+      !sceneBlob(s) &&
+      s.prompt.trim() &&
+      !s.task?.remoteId &&
+      !w.queue.some((q) => q.sceneId === s.id) &&
+      w.job?.sceneId !== s.id,
   );
   const openClip = (
     id: string,
@@ -214,7 +219,7 @@ export function ProjectWorkspace({
           </div>
           <button
             className="button compact"
-            disabled={!pending.length || !!w.job}
+            disabled={!pending.length}
             onClick={() => void w.run(pending.map((s) => s.id))}
           >
             <Play size={14} />{" "}
@@ -442,6 +447,7 @@ export function ProjectWorkspace({
                         {scene.title || "Clip sin título"}
                       </button>
                       <span
+                        role="status"
                         className={
                           scene.error
                             ? "warning-text"
@@ -452,15 +458,48 @@ export function ProjectWorkspace({
                       >
                         {w.job?.sceneId === scene.id
                           ? "Generando…"
-                          : scene.task?.remoteId
-                            ? "Por recuperar"
-                            : scene.error
-                              ? "Revisar"
-                              : blob
-                                ? "Listo"
-                                : "Borrador"}
+                          : w.queue.some((q) => q.sceneId === scene.id)
+                            ? "En cola"
+                            : scene.task?.remoteId
+                              ? "Por recuperar"
+                              : scene.error
+                                ? "Revisar"
+                                : blob
+                                  ? "Listo"
+                                  : "Borrador"}
                       </span>
                     </div>
+                    {(w.job?.sceneId === scene.id ||
+                      w.queue.some((q) => q.sceneId === scene.id)) && (
+                      <div className="clip-generation" role="status">
+                        {w.job?.sceneId === scene.id && (
+                          <>
+                            <strong>
+                              <LoaderCircle size={14} className="spin" />{" "}
+                              Versión {w.job.index} de {w.job.total}
+                            </strong>
+                            <span>{w.job.text}</span>
+                          </>
+                        )}
+                        {w.queue.some((q) => q.sceneId === scene.id) && (
+                          <span>
+                            {
+                              w.queue.filter((q) => q.sceneId === scene.id)
+                                .length
+                            }{" "}
+                            en espera{w.queuePaused ? " · Cola pausada" : ""}
+                          </span>
+                        )}
+                        {w.queue.some((q) => q.sceneId === scene.id) && (
+                          <button
+                            className="text-button"
+                            onClick={() => void w.cancelQueued(scene.id)}
+                          >
+                            Cancelar pendientes
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <p className="clip-prompt">
                       {version?.prompt ||
                         scene.prompt ||
@@ -488,7 +527,10 @@ export function ProjectWorkspace({
                         <div className="inline">
                           <IconButton
                             label={`Duplicar clip: ${scene.title || "Sin título"}`}
-                            disabled={!!w.job}
+                            disabled={
+                              w.job?.sceneId === scene.id ||
+                              w.queue.some((q) => q.sceneId === scene.id)
+                            }
                             onClick={() =>
                               void w.action(async () => {
                                 const copy = await db.duplicateScene(scene.id);
@@ -500,7 +542,10 @@ export function ProjectWorkspace({
                           </IconButton>
                           <IconButton
                             label={`Eliminar clip: ${scene.title || "Sin título"}`}
-                            disabled={!!w.job}
+                            disabled={
+                              w.job?.sceneId === scene.id ||
+                              w.queue.some((q) => q.sceneId === scene.id)
+                            }
                             onClick={() => removeClip(scene.id)}
                           >
                             <Trash2 size={15} />
@@ -517,17 +562,19 @@ export function ProjectWorkspace({
                         </div>
                       )}
                     </div>
-                    {!scene.deleted_at && scene.task?.remoteId && (
-                      <button
-                        className="text-button recover-clip"
-                        disabled={!!w.job}
-                        onClick={() =>
-                          void w.run([scene.id], "generate", undefined, true)
-                        }
-                      >
-                        <RotateCcw size={14} /> Recuperar resultado
-                      </button>
-                    )}
+                    {!scene.deleted_at &&
+                      scene.task?.remoteId &&
+                      w.job?.sceneId !== scene.id && (
+                        <button
+                          className="text-button recover-clip"
+                          disabled={!!w.job}
+                          onClick={() =>
+                            void w.run([scene.id], "generate", undefined, true)
+                          }
+                        >
+                          <RotateCcw size={14} /> Recuperar resultado
+                        </button>
+                      )}
                     {sequence.some((s) => s.id === scene.id) && (
                       <span className="clip-in-sequence">
                         <Film size={12} /> En la secuencia
@@ -594,6 +641,7 @@ export function ProjectWorkspace({
             settings={() => settings(editing)}
             initialSceneId={editing}
             clipOnly
+            onGenerationQueued={() => setView("clips")}
             browseClips={() => setView("clips")}
           />
         </ClipDialog>
@@ -692,7 +740,7 @@ function ClipDialog({
       <div className="clip-dialog-body">{children}</div>
       <div className="clip-dialog-footnote">
         {w.job
-          ? "La generación continúa aunque cierres esta ventana."
+          ? "La generación continúa aunque cierres este editor."
           : "Los cambios se guardan automáticamente en el proyecto."}
       </div>
     </dialog>

@@ -58,6 +58,20 @@ export interface GenerationTask {
   previousDuration?: number;
   started_at: string;
 }
+export interface QueuedGeneration {
+  id: string;
+  sceneId: string;
+  task: GenerationTask;
+  images: {
+    mimeType: string;
+    data: string;
+    role: "first" | "last" | "reference";
+  }[];
+  index: number;
+  total: number;
+  created_at: string;
+  resume?: boolean;
+}
 export interface Scene {
   id: string;
   project_id: string;
@@ -76,6 +90,7 @@ export interface Scene {
   versions?: ClipVersion[];
   active_version_id?: string;
   task?: GenerationTask;
+  generation_queue?: QueuedGeneration[];
   error?: string;
   video_blob?: Blob;
   created_at: string;

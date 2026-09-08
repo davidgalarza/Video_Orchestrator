@@ -32,6 +32,16 @@ async function createProject(page: Page, sceneCount = 1) {
   }
 }
 
+async function reopenReady(page: Page, version = 1) {
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.locator(".project-clip").first().locator(".clip-version"),
+  ).toContainText(`V${version}`, { timeout: 15000 });
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+}
+
 test("editor workflow: key, blank project, references, versions, persistence and responsive layout", async ({
   page,
 }) => {
@@ -116,15 +126,15 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await page
     .getByRole("button", { name: "Generar escena", exact: true })
     .click();
-  await expect(page.locator(".preview-frame video")).toBeVisible({
-    timeout: 15000,
-  });
+  await reopenReady(page);
+  await expect(page.locator(".preview-frame video")).toBeVisible();
   expect(bodies[0]).toMatchObject({ model: "gemini-omni-1.1-flash" });
   await page.getByRole("button", { name: "Editar", exact: true }).click();
   await page
     .getByLabel("¿Qué quieres cambiar?")
     .fill("Una iluminación más cálida.");
   await page.getByRole("button", { name: "Crear versión editada" }).click();
+  await reopenReady(page, 2);
   await expect(page.locator(".preview-meta")).toContainText("Versión 2", {
     timeout: 15000,
   });
@@ -136,6 +146,7 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await page
     .getByRole("button", { name: "Extender 10 segundos", exact: true })
     .click();
+  await reopenReady(page, 3);
   await expect(page.locator(".preview-meta")).toContainText("Versión 3", {
     timeout: 15000,
   });
@@ -231,11 +242,17 @@ test("paused generations recover after reload without creating a second video", 
     .getByRole("button", { name: "Generar escena", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Pausar seguimiento", exact: true }),
+    page.getByRole("button", {
+      name: "Pausar seguimiento de la generación",
+      exact: true,
+    }),
   ).toBeVisible();
   await expect.poll(() => posts).toBe(1);
   await page
-    .getByRole("button", { name: "Pausar seguimiento", exact: true })
+    .getByRole("button", {
+      name: "Pausar seguimiento de la generación",
+      exact: true,
+    })
     .click();
   await expect(
     page.getByRole("button", { name: "Recuperar resultado" }),
@@ -249,11 +266,12 @@ test("paused generations recover after reload without creating a second video", 
     .getByRole("dialog")
     .getByRole("button", { name: "Recuperar resultado" })
     .click();
+  await reopenReady(page);
   await expect(page.locator(".preview-frame video")).toBeVisible();
   expect(posts).toBe(1);
 });
 
-test("queue stops on quota failure and leaves remaining scenes as drafts", async ({
+test("queue stops on quota failure and preserves waiting scenes", async ({
   page,
 }) => {
   let posts = 0;
@@ -278,7 +296,7 @@ test("queue stops on quota failure and leaves remaining scenes as drafts", async
   ).toHaveCount(1);
   expect(posts).toBe(1);
   await expect(
-    page.locator(".project-clip").filter({ hasText: "Borrador" }),
+    page.locator(".project-clip").filter({ hasText: "En cola" }),
   ).toHaveCount(2);
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
@@ -658,6 +676,7 @@ test("edit instructions persist and mobile switches between configuration and th
   await page
     .getByRole("button", { name: "Generar escena", exact: true })
     .click();
+  await reopenReady(page);
   await expect(page.locator(".preview-frame video")).toBeVisible();
   await page.getByRole("button", { name: "Editar", exact: true }).click();
   await page
@@ -692,4 +711,208 @@ test("edit instructions persist and mobile switches between configuration and th
   await page.screenshot({ path: "artifacts/ux-mobile-configure.png" });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: "artifacts/ux-desktop-clip.png" });
+});
+
+test("background queue accepts more clips, preserves snapshots and creates N versions from the selected take", async ({
+  page,
+}) => {
+  const bodies: Record<string, unknown>[] = [];
+  let ready = false;
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, async (route) => {
+    if (route.request().method() === "POST") {
+      bodies.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: { id: `batch-${bodies.length}`, status: "in_progress" },
+      });
+    } else
+      await route.fulfill({
+        json: ready
+          ? {
+              id: route.request().url().split("/").at(-1),
+              status: "completed",
+              steps: [
+                {
+                  type: "model_output",
+                  content: [{ type: "video", data: clip }],
+                },
+              ],
+            }
+          : { status: "in_progress" },
+      });
+  });
+  await page.goto("/");
+  await createProject(page);
+  await page.getByLabel("Versiones a generar").fill("3");
+  await page
+    .getByRole("button", { name: "Generar 3 versiones", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".clip-generation")).toContainText(
+    "Versión 1 de 3",
+  );
+  await expect(page.locator(".clip-generation")).toContainText("2 en espera");
+  await page.getByRole("button", { name: "Nuevo clip", exact: true }).click();
+  await page
+    .getByLabel("¿Qué ocurre en esta toma?")
+    .fill("Una montaña nevada.");
+  await page
+    .getByRole("button", { name: "Generar escena", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".project-clip").last()).toContainText("En cola");
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await page
+    .getByLabel("¿Qué ocurre en esta toma?")
+    .fill("Este borrador no modifica lo enviado.");
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "artifacts/queue-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/queue-mobile.png" });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  ready = true;
+  await expect(page.locator(".job-bar")).toHaveCount(0, { timeout: 25000 });
+  expect(bodies).toHaveLength(4);
+  expect(bodies[0]).toEqual(bodies[1]);
+  expect(bodies[1]).toEqual(bodies[2]);
+  await expect(page.locator(".project-clip").first()).toContainText(
+    "3 versiones",
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await page.locator(".versions summary").click();
+  await page.getByRole("button", { name: /V1.*Generación/ }).click();
+  await page.getByLabel("¿Qué quieres cambiar?").fill("Cambia la luz.");
+  await page.getByLabel("Versiones a generar").fill("2");
+  await page
+    .getByRole("button", { name: "Generar 2 versiones", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".project-clip").first()).toContainText(
+    "5 versiones",
+    { timeout: 20000 },
+  );
+  expect(bodies[4]).toMatchObject({ previous_interaction_id: "batch-1" });
+  expect(bodies[5]).toMatchObject({ previous_interaction_id: "batch-1" });
+});
+
+test("waiting versions survive pause and reload and can be cancelled without new paid requests", async ({
+  page,
+}) => {
+  let posts = 0;
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, (route) => {
+    if (route.request().method() === "POST") posts++;
+    return route.fulfill({
+      json: { id: "waiting-batch", status: "in_progress" },
+    });
+  });
+  await page.goto("/");
+  await createProject(page);
+  await page.getByLabel("Versiones a generar").fill("3");
+  await page
+    .getByRole("button", { name: "Generar 3 versiones", exact: true })
+    .click();
+  await expect.poll(() => posts).toBe(1);
+  await expect(page.locator(".clip-generation")).toContainText("2 en espera");
+  await page
+    .getByRole("button", {
+      name: "Pausar seguimiento de la generación",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Continuar cola", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".clip-generation")).toContainText(
+    "2 en espera · Cola pausada",
+  );
+  expect(posts).toBe(1);
+  await page
+    .getByRole("button", { name: "Continuar cola", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Recupera el resultado pendiente",
+  );
+  expect(posts).toBe(1);
+  await page
+    .getByRole("button", { name: "Cancelar pendientes", exact: true })
+    .click();
+  await expect(page.locator(".clip-generation")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".job-bar")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Recuperar resultado", exact: true }),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+});
+
+test("recovering an interrupted batch resumes its remaining versions exactly once", async ({
+  page,
+}) => {
+  let posts = 0,
+    ready = false;
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, (route) => {
+    if (route.request().method() === "POST") posts++;
+    return route.fulfill({
+      json: ready
+        ? {
+            id: `resume-${posts}`,
+            status: "completed",
+            steps: [
+              {
+                type: "model_output",
+                content: [{ type: "video", data: clip }],
+              },
+            ],
+          }
+        : { id: "resume-1", status: "in_progress" },
+    });
+  });
+  await page.goto("/");
+  await createProject(page);
+  await page.getByLabel("Versiones a generar").fill("3");
+  await page
+    .getByRole("button", { name: "Generar 3 versiones", exact: true })
+    .click();
+  await expect.poll(() => posts).toBe(1);
+  await page
+    .getByRole("button", {
+      name: "Pausar seguimiento de la generación",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Continuar cola", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  ready = true;
+  await page
+    .getByRole("button", { name: "Recuperar resultado", exact: true })
+    .click();
+  await expect(page.locator(".project-clip").first()).toContainText(
+    "3 versiones",
+    { timeout: 15000 },
+  );
+  await expect(page.locator(".job-bar")).toHaveCount(0);
+  expect(posts).toBe(3);
 });

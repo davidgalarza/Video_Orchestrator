@@ -228,3 +228,48 @@ describe("recoverable clip deletion", () => {
     ).toHaveLength(2);
   });
 });
+
+describe("durable background queue", () => {
+  it("keeps submitted inputs independent of drafts and claims each request only once", async () => {
+    const project = await db.createProject(
+      "Queue",
+      [{ title: "Clip", prompt: "Original" }],
+      DEFAULT_VIDEO,
+    );
+    const scene = (await db.readWorkspace()).scenes.find(
+      (s) => s.project_id === project.id,
+    )!;
+    const first = {
+      id: "queued-first",
+      sceneId: scene.id,
+      task: {
+        prompt: "Original",
+        mode: "generate" as const,
+        settings: DEFAULT_VIDEO,
+        started_at: "today",
+      },
+      images: [{ role: "first" as const, mimeType: "image/png", data: "AA==" }],
+      index: 1,
+      total: 2,
+      created_at: "today",
+    };
+    const second = { ...first, id: "queued-second", index: 2 };
+    await db.enqueueGenerations([first, second]);
+    await db.patchScene(scene.id, { prompt: "Changed draft" });
+    expect(
+      (await db.getScene(scene.id))?.generation_queue?.[0].task.prompt,
+    ).toBe("Original");
+    expect(await db.startQueuedGeneration(first)).toBe(true);
+    expect(await db.startQueuedGeneration(first)).toBe(false);
+    const saved = (await db.getScene(scene.id))!;
+    expect(saved.task?.prompt).toBe("Original");
+    expect(saved.prompt).toBe("Changed draft");
+    expect(saved.generation_queue).toEqual([second]);
+    await db.patchScene(scene.id, {
+      task: { ...first.task, remoteId: "remote-op" },
+    });
+    await db.cancelQueuedGenerations(scene.id);
+    expect(await db.startQueuedGeneration(second)).toBe(false);
+    expect((await db.getScene(scene.id))?.task?.remoteId).toBe("remote-op");
+  });
+});

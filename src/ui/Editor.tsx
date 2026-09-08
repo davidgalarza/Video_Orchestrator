@@ -11,7 +11,6 @@ import {
   History,
   ImagePlus,
   LoaderCircle,
-  Pause,
   Play,
   Plus,
   RotateCcw,
@@ -44,6 +43,7 @@ export function Editor({
   sequenceMode = false,
   browseClips,
   clipOnly = false,
+  onGenerationQueued,
 }: {
   project: Project;
   workspace: WorkspaceController;
@@ -52,6 +52,7 @@ export function Editor({
   sequenceMode?: boolean;
   browseClips: () => void;
   clipOnly?: boolean;
+  onGenerationQueued?: () => void;
 }) {
   const allScenes = w.scenes.filter((s) => s.project_id === project.id);
   const scenes = sequenceMode ? sequenceScenes(project, allScenes) : allScenes;
@@ -63,7 +64,12 @@ export function Editor({
   const scene = scenes.find((s) => s.id === selectedId) || scenes[0];
   const ready = scenes.filter((s) => sceneBlob(s));
   const pending = scenes.filter(
-    (s) => !sceneBlob(s) && s.prompt.trim() && !s.task?.remoteId,
+    (s) =>
+      !sceneBlob(s) &&
+      s.prompt.trim() &&
+      !s.task?.remoteId &&
+      !w.queue.some((q) => q.sceneId === s.id) &&
+      w.job?.sceneId !== s.id,
   );
   const version = scene ? activeVersion(scene) : undefined;
   const config = scene ? version?.settings || sceneSettings(scene) : undefined;
@@ -159,7 +165,7 @@ export function Editor({
           <div className="inline">
             <button
               className="button compact"
-              disabled={!pending.length || busy}
+              disabled={!pending.length}
               onClick={() => void w.run(pending.map((s) => s.id))}
             >
               <Play size={14} />
@@ -443,6 +449,7 @@ export function Editor({
             assets={w.assets}
             workspace={w}
             openSettings={settings}
+            onGenerationQueued={onGenerationQueued}
           />
         </div>
       ) : (
@@ -472,11 +479,13 @@ function Inspector({
   assets,
   workspace: w,
   openSettings,
+  onGenerationQueued,
 }: {
   scene: Scene;
   assets: Asset[];
   workspace: WorkspaceController;
   openSettings: () => void;
+  onGenerationQueued?: () => void;
 }) {
   const [prompt, setPrompt] = useState(scene.prompt);
   const [title, setTitle] = useState(
@@ -492,9 +501,11 @@ function Inspector({
     "saved",
   );
   const [uploading, setUploading] = useState(false);
+  const [count, setCount] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
   const version = activeVersion(scene),
     config = sceneSettings(scene),
-    busy = w.job?.sceneId === scene.id;
+    busy = submitting;
   const editable =
     !!version?.interactionId && version.settings.model === OMNI_MODEL;
   const save = (patch: Partial<Scene>) => {
@@ -535,16 +546,21 @@ function Inspector({
     }
   };
   const currentJob = w.job?.sceneId === scene.id;
-  const needsRecovery = !!scene.task?.remoteId;
+  const needsRecovery = !!scene.task?.remoteId && !currentJob;
   const generate = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       await w.patch(scene.id, { prompt, title });
-      await w.run([scene.id], mode, instruction);
+      if (await w.run([scene.id], mode, instruction, false, count))
+        onGenerationQueued?.();
     } catch (e) {
       w.notify(
         e instanceof Error ? e.message : "No se pudo guardar el prompt.",
         true,
       );
+    } finally {
+      setSubmitting(false);
     }
   };
   return (
@@ -637,7 +653,7 @@ function Inspector({
               if (
                 (e.ctrlKey || e.metaKey) &&
                 e.key === "Enter" &&
-                !w.job &&
+                !submitting &&
                 !uploading &&
                 (mode === "generate" ? prompt : instruction).trim() &&
                 !needsRecovery
@@ -903,6 +919,20 @@ function Inspector({
         )}
       </div>
       <div className="generate-footer">
+        {!needsRecovery && (
+          <label className="version-count">
+            <span>Versiones a generar</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={Number.isNaN(count) ? "" : count}
+              disabled={submitting}
+              onChange={(e) => setCount(e.target.valueAsNumber)}
+            />
+          </label>
+        )}
         {scene.error && (
           <div className="inline-error" role="alert">
             {scene.error}
@@ -912,19 +942,15 @@ function Inspector({
           <button className="button primary full" onClick={openSettings}>
             Conectar Google para generar
           </button>
-        ) : currentJob ? (
-          <button className="button full" onClick={w.pause}>
-            <Pause size={16} />
-            Pausar seguimiento
-          </button>
         ) : needsRecovery ? (
           <>
             <button
               className="button primary full"
               disabled={!!w.job}
-              onClick={() =>
-                void w.run([scene.id], "generate", undefined, true)
-              }
+              onClick={async () => {
+                if (await w.run([scene.id], "generate", undefined, true))
+                  onGenerationQueued?.();
+              }}
             >
               <RotateCcw size={16} />
               Recuperar resultado
@@ -952,31 +978,37 @@ function Inspector({
           <button
             className="button primary full"
             disabled={
-              !!w.job ||
+              submitting ||
+              !Number.isInteger(count) ||
+              count < 1 ||
+              count > 20 ||
               uploading ||
               !(mode === "generate" ? prompt : instruction).trim()
             }
             onClick={() => void generate()}
           >
             <WandSparkles size={17} />
-            {mode === "edit"
-              ? "Crear versión editada"
-              : mode === "extend"
-                ? "Extender 10 segundos"
-                : version
-                  ? "Generar otra versión"
-                  : "Generar escena"}
+            {submitting
+              ? "Añadiendo…"
+              : count > 1
+                ? `Generar ${count} versiones`
+                : mode === "edit"
+                  ? "Crear versión editada"
+                  : mode === "extend"
+                    ? "Extender 10 segundos"
+                    : version
+                      ? "Generar otra versión"
+                      : "Generar escena"}
             <span className="key-hint" aria-hidden="true">
               ⌘ ↵
             </span>
           </button>
         )}
         <small>
-          {w.job && !currentJob
-            ? "Hay otro clip generándose. Puedes preparar este mientras termina."
-            : version
-              ? "Se creará una nueva versión. La anterior se conserva."
-              : "Cada generación consume tu cuota de Google."}
+          {count > 1
+            ? `${count} solicitudes a Google. Se guardarán como versiones de este clip${mode !== "generate" ? ", todas a partir de la toma seleccionada" : ""}.`
+            : "Cada generación consume tu cuota de Google. Las versiones anteriores se conservan."}{" "}
+          Puedes seguir trabajando mientras avanza la cola.
         </small>
         <button className="text-button" onClick={openSettings}>
           Configurar mi API key

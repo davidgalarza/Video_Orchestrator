@@ -2229,6 +2229,39 @@ button {
   color: var(--muted);
   font-weight: 400;
 }
+.version-count {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.version-count input {
+  width: 76px;
+  min-height: 44px;
+}
+.clip-generation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.78rem;
+}
+.clip-generation strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.clip-generation > span {
+  color: var(--muted);
+}
+.clip-generation button {
+  align-self: flex-start;
+  min-height: 36px;
+}
 .prompt-info {
   display: flex;
   justify-content: space-between;

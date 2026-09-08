@@ -7,6 +7,7 @@ import {
   type Asset,
   type ClipVersion,
   type VideoSettings,
+  type QueuedGeneration,
 } from "../types";
 interface StudioDB extends DBSchema {
   projects: { key: string; value: Project };
@@ -62,6 +63,55 @@ export async function readWorkspace() {
     assets: assets.sort((a, b) => b.created_at.localeCompare(a.created_at)),
     usage,
   };
+}
+export async function enqueueGenerations(items: QueuedGeneration[]) {
+  const db = await connection;
+  const tx = db.transaction("scenes", "readwrite");
+  for (const item of items) {
+    const scene = await tx.store.get(item.sceneId);
+    if (!scene || scene.deleted_at) {
+      tx.abort();
+      throw new Error("El clip ya no está disponible.");
+    }
+    await tx.store.put({
+      ...scene,
+      generation_queue: [...(scene.generation_queue || []), item],
+    });
+  }
+  await tx.done;
+}
+export async function startQueuedGeneration(item: QueuedGeneration) {
+  const db = await connection;
+  const tx = db.transaction("scenes", "readwrite");
+  const scene = await tx.store.get(item.sceneId);
+  if (
+    !scene ||
+    scene.deleted_at ||
+    !scene.generation_queue?.some((q) => q.id === item.id)
+  ) {
+    await tx.done;
+    return false;
+  }
+  if (item.resume && scene.task?.remoteId !== item.task.remoteId) {
+    await tx.store.put({
+      ...scene,
+      generation_queue: scene.generation_queue.filter((q) => q.id !== item.id),
+    });
+    await tx.done;
+    return false;
+  }
+  await tx.store.put({
+    ...scene,
+    generation_queue: scene.generation_queue.filter((q) => q.id !== item.id),
+    task: item.task,
+    status: "processing",
+    error: undefined,
+  });
+  await tx.done;
+  return true;
+}
+export async function cancelQueuedGenerations(sceneId: string) {
+  await patchScene(sceneId, { generation_queue: [] });
 }
 export async function createProject(
   name: string,
@@ -186,21 +236,18 @@ export async function deleteScene(id: string) {
           all.filter((s) => !s.deleted_at),
         ).map((s) => s.id)
       : [];
-    await tx
-      .objectStore("scenes")
-      .put({
-        ...scene,
-        deleted_at: now(),
-        deleted_sequence_index: sequence.indexOf(id),
-      });
+    await tx.objectStore("scenes").put({
+      ...scene,
+      deleted_at: now(),
+      generation_queue: [],
+      deleted_sequence_index: sequence.indexOf(id),
+    });
     if (project)
-      await tx
-        .objectStore("projects")
-        .put({
-          ...project,
-          sequence_ids: sequence.filter((item) => item !== id),
-          updated_at: now(),
-        });
+      await tx.objectStore("projects").put({
+        ...project,
+        sequence_ids: sequence.filter((item) => item !== id),
+        updated_at: now(),
+      });
   }
   await tx.done;
 }
@@ -218,14 +265,12 @@ export async function restoreScene(id: string) {
         0,
         id,
       );
-    await tx
-      .objectStore("scenes")
-      .put({
-        ...scene,
-        deleted_at: undefined,
-        deleted_sequence_index: undefined,
-        updated_at: now(),
-      });
+    await tx.objectStore("scenes").put({
+      ...scene,
+      deleted_at: undefined,
+      deleted_sequence_index: undefined,
+      updated_at: now(),
+    });
     await tx
       .objectStore("projects")
       .put({ ...project, sequence_ids: sequence, updated_at: now() });

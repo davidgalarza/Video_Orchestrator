@@ -199,7 +199,7 @@ export function StudioApp() {
             {project && (
               <IconButton
                 label="Eliminar proyecto"
-                disabled={!!w.job}
+                disabled={!!w.job || w.queue.length > 0}
                 onClick={() => {
                   if (
                     window.confirm(
@@ -290,30 +290,43 @@ export function StudioApp() {
             </>
           )}
         </main>
-        {w.job && (
+        {(w.job || w.queue.length > 0) && (
           <div className="job-bar" role="status">
             <span className="activity-dot" />
             <span>
-              <strong>{w.job.text}</strong>
+              <strong>
+                {w.job
+                  ? `${w.scenes.find((s) => s.id === (w.job?.sceneId || w.queue[0]?.sceneId))?.title || "Clip"} · ${w.job.text}`
+                  : "Cola pausada"}
+              </strong>
               <small>
-                Escena {w.job.index} de {w.job.total} en esta tanda
+                {w.job ? `Versión ${w.job.index} de ${w.job.total} · ` : ""}
+                {w.queue.length} en espera · Mantén esta pestaña abierta
               </small>
             </span>
             <button
               className="text-button"
               onClick={() => {
-                const scene = w.scenes.find((s) => s.id === w.job!.sceneId);
+                const scene = w.scenes.find(
+                  (s) => s.id === (w.job?.sceneId || w.queue[0]?.sceneId),
+                );
                 if (scene) open(scene.project_id);
               }}
             >
               Ver proyecto
             </button>
-            <IconButton
-              label="Pausar seguimiento de la generación"
-              onClick={w.pause}
-            >
-              <Pause size={16} />
-            </IconButton>
+            {!w.job && w.queue.length > 0 ? (
+              <button className="text-button" onClick={w.continueQueue}>
+                Continuar cola
+              </button>
+            ) : (
+              <IconButton
+                label="Pausar seguimiento de la generación"
+                onClick={w.pause}
+              >
+                <Pause size={16} />
+              </IconButton>
+            )}
           </div>
         )}
       </div>
