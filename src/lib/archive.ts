@@ -1,14 +1,20 @@
+import {
+  qualityFilename,
+  type DownloadResolution,
+  type VideoProcessingOptions,
+} from "./videoQuality";
 import { activeVersion, sceneBlob, sceneSettings, type Scene } from "../types";
 
 const table = Uint32Array.from({ length: 256 }, (_, n) => {
   for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1;
   return n >>> 0;
 });
-async function crc32(blob: Blob) {
+async function crc32(blob: Blob, signal?: AbortSignal) {
   let crc = 0xffffffff;
   const reader = blob.stream().getReader();
   try {
     for (;;) {
+      signal?.throwIfAborted();
       const { value, done } = await reader.read();
       if (done) break;
       for (const byte of value) crc = table[(crc ^ byte) & 255] ^ (crc >>> 8);
@@ -22,7 +28,9 @@ async function crc32(blob: Blob) {
 // Blob parts plus incremental CRC calculation avoid copying all media into RAM.
 export async function createZip(
   files: { name: string; blob: Blob }[],
+  signal?: AbortSignal,
 ): Promise<Blob> {
+  signal?.throwIfAborted();
   if (!files.length) throw new Error("Selecciona al menos un vídeo.");
   if (files.length > 65535)
     throw new Error("Selecciona menos archivos para este ZIP.");
@@ -44,7 +52,7 @@ export async function createZip(
   let offset = 0,
     directorySize = 0;
   for (const file of entries) {
-    const crc = await crc32(file.blob);
+    const crc = await crc32(file.blob, signal);
     const header = new Uint8Array(30 + file.encoded.length),
       h = new DataView(header.buffer);
     h.setUint32(0, 0x04034b50, true);
@@ -98,7 +106,8 @@ export function clipFilename(scene: Scene, index?: number) {
     : 1;
   return `${index === undefined ? "" : `${String(index + 1).padStart(3, "0")}-`}${title}-v${number}.mp4`;
 }
-export interface ArchiveOptions {
+export interface ArchiveOptions extends VideoProcessingOptions {
+  resolution?: DownloadResolution;
   prefix?: string;
   names?: Record<string, string>;
   includeMetadata?: boolean;
@@ -122,6 +131,10 @@ export function archiveNames(scenes: Scene[], options: ArchiveOptions = {}) {
         .slice(0, 100) || "Clip";
     if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base))
       base = `Clip-${base}`;
+    base = qualityFilename(
+      `${base}.mp4`,
+      options.resolution || "original",
+    ).replace(/\.mp4$/i, "");
     let name = `${base}.mp4`,
       suffix = 2;
     while (used.has(name.toLocaleLowerCase())) name = `${base}-${suffix++}.mp4`;
@@ -137,10 +150,28 @@ export async function archiveClips(
   if (!ready.length)
     throw new Error("La selección no contiene vídeos generados.");
   const names = archiveNames(ready, options);
-  const files = ready.map((scene, i) => ({
-    name: names[i],
-    blob: sceneBlob(scene)!,
-  }));
+  const files: { name: string; blob: Blob }[] = [];
+  for (const [i, scene] of ready.entries()) {
+    options.signal?.throwIfAborted();
+    let blob = sceneBlob(scene)!;
+    if (options.resolution && options.resolution !== "original") {
+      const { resizeVideo } = await import("./export");
+      blob = await resizeVideo(blob, options.resolution, {
+        signal: options.signal,
+        onProgress: (progress) =>
+          options.onProgress?.({
+            text: `Clip ${i + 1} de ${ready.length} · ${progress.text}`,
+            fraction:
+              progress.fraction === undefined
+                ? undefined
+                : (i + progress.fraction) / ready.length,
+          }),
+      });
+    }
+    files.push({ name: names[i], blob });
+  }
+  options.signal?.throwIfAborted();
+  options.onProgress?.({ text: "Preparando el ZIP…" });
   const manifest = ready.map((scene, i) => ({
     file: files[i].name,
     title: scene.title,
@@ -150,15 +181,24 @@ export async function archiveClips(
     duration: activeVersion(scene)?.duration || sceneSettings(scene).duration,
     origin: scene.origin,
     favorite: scene.review === "favorite",
-  }));
-  if (options.includeMetadata === false) return createZip(files);
-  return createZip([
-    ...files,
-    {
-      name: "clips.json",
-      blob: new Blob([JSON.stringify(manifest, null, 2)], {
-        type: "application/json",
-      }),
+    download: {
+      resolution: options.resolution || "original",
+      processing: files[i].blob === sceneBlob(scene) ? "original" : "lanczos",
+      bytes: files[i].blob.size,
     },
-  ]);
+  }));
+  if (options.includeMetadata === false)
+    return createZip(files, options.signal);
+  return createZip(
+    [
+      ...files,
+      {
+        name: "clips.json",
+        blob: new Blob([JSON.stringify(manifest, null, 2)], {
+          type: "application/json",
+        }),
+      },
+    ],
+    options.signal,
+  );
 }

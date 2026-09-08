@@ -19,14 +19,20 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 - Elegir de 1 a 20 clips por solicitud y seguir preparando o enviando clips mientras avanza una cola en segundo plano.
 - Pausar el seguimiento y recuperar una operación guardada después de recargar, sin lanzar otra generación.
 - Crear imágenes de referencia con Gemini 3.1 Flash Image.
-- Descargar un clip o seleccionar varios para obtener un ZIP con sus vídeos originales y un archivo `clips.json` con prompts y ajustes.
+- Descargar clips individuales o en ZIP en resolución original, 720p, 1080p o 4K; conservar siempre los originales. Incluir opcionalmente `clips.json` con prompts, ajustes y datos de la descarga.
 - Montar una secuencia opcional con los clips elegidos, ordenarla y exportarla en un MP4. Quitar un clip de la secuencia conserva el clip en el proyecto.
 
 ## Dos formas de trabajar
 
-El proyecto abre en **Clips del proyecto**. Usa **Nuevo clip** o abre uno existente para generar, revisar versiones y descargarlo en un modal individual. Al cerrarlo, vuelves a la biblioteca y los cambios quedan guardados. Para seguir en un editor local, selecciona clips y pulsa **Descargar seleccionados · ZIP**: se incluye la versión activa de cada vídeo, sin recomprimir. Los borradores se excluyen y los nombres llevan un índice para evitar colisiones. El ZIP admite hasta 4 GB; para más material, descarga por grupos.
+El proyecto abre en **Clips del proyecto**. Usa **Nuevo clip** o abre uno existente para generar, revisar versiones y descargarlo en un modal individual. Al cerrarlo, vuelves a la biblioteca y los cambios quedan guardados. Para seguir en un editor local, selecciona clips y pulsa **Descargar seleccionados · ZIP**: se incluye la versión activa de cada vídeo. La resolución **Original** la conserva sin recomprimir. Los borradores se excluyen y los nombres llevan un índice para evitar colisiones. El ZIP admite hasta 4 GB; para más material, descarga por grupos.
 
 **Descargar clips** permite elegir seleccionados, favoritos o todos los disponibles. Puedes usar los nombres de los clips, un nombre común numerado o personalizar cada archivo. La vista previa muestra los nombres seguros definitivos y resuelve duplicados. Los prompts, ajustes, duración y origen se incluyen opcionalmente en `clips.json`. Los descartados se excluyen de Favoritos y Todos; puedes seleccionarlos explícitamente si quieres descargarlos.
+
+**Resolución de descarga** funciona desde las tarjetas, el editor, Mis vídeos y el ZIP. La vista individual muestra las dimensiones reales antes y después del cambio. 720p, 1080p y 4K conservan la proporción vertical u horizontal. El nombre añade la resolución; los ajustes de generación del manifiesto permanecen separados de los datos de descarga. Si el archivo ya tiene las dimensiones solicitadas, se entrega sin recomprimir.
+
+El escalado usa [Lanczos de FFmpeg](https://ffmpeg.org/ffmpeg-scaler.html) con H.264 CRF 18 y preset `veryfast`. Se ejecuta en este dispositivo, sin enviar los vídeos a un servicio ni consumir cuota de Google. Conserva el audio por copia, la duración y la velocidad de los clips individuales. Es interpolación, no restauración con IA: aumenta la resolución sin recuperar detalle perdido. 1080p ofrece un equilibrio práctico; 4K puede tardar varios minutos y consumir mucha memoria. El motor se carga bajo demanda, muestra progreso y permite cancelar; mantén la pestaña abierta. Los ZIP procesan un clip cada vez. Archivos individuales mayores de 512 MB y salidas mayores de 8,3 megapíxeles requieren un editor local. Las secuencias se codifican directamente en la resolución elegida, con audio normalizado y 24 fps como antes.
+
+La alternativa de restauración [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) requiere otro entorno de ejecución (Python, un binario nativo o un servicio externo); no se incluye en el despliegue estático. [ffmpeg.wasm es más lento que FFmpeg nativo](https://ffmpegwasm.netlify.app/docs/faq/), por lo que para trabajo largo en 4K conviene el editor local.
 
 Selecciona exactamente dos clips con vídeo y pulsa **Comparar 2 clips**. Ambos comparten reproducción y desplazamiento; puedes escuchar uno a la vez y marcar el favorito sin salir. Si las duraciones difieren, el más corto conserva su último fotograma mientras continúa el otro.
 

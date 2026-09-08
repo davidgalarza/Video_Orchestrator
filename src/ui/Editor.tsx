@@ -18,7 +18,7 @@ import {
 import type { WorkspaceController } from "../lib/useWorkspace";
 import * as db from "../lib/storage";
 import { getApiKey } from "../lib/settings";
-import { downloadBlob } from "../lib/media";
+import { VideoDownloadDialog, type VideoDownload } from "./VideoDownloadDialog";
 import {
   activeVersion,
   sceneBlob,
@@ -60,7 +60,7 @@ export function Editor({
     initialSceneId || scenes[0]?.id || "",
   );
   const [safe, setSafe] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [download, setDownload] = useState<VideoDownload>();
   const scene = scenes.find((s) => s.id === selectedId) || scenes[0];
   const ready = scenes.filter((s) => sceneBlob(s));
   const pending = scenes.filter(
@@ -111,33 +111,14 @@ export function Editor({
       )
     )
       return;
-    setExporting(true);
-    try {
-      if (ready.length === 1)
-        downloadBlob(sceneBlob(ready[0])!, `${project.name}.mp4`);
-      else {
-        w.notify(
-          "Uniendo las escenas en este dispositivo. La primera exportación descarga el motor de vídeo.",
-        );
-        const { stitchVideos } = await import("../lib/export");
-        const blob = await stitchVideos(
-          ready.map((s) => sceneBlob(s)!),
-          activeVersion(ready[0])?.settings.aspectRatio ||
-            sceneSettings(ready[0]).aspectRatio,
-        );
-        downloadBlob(blob, `${project.name}.mp4`);
-      }
-      w.notify("Vídeo preparado para descargar.");
-    } catch (e) {
-      w.notify(
-        e instanceof Error
-          ? e.message
-          : "No se pudo exportar. Descarga los clips por separado.",
-        true,
-      );
-    } finally {
-      setExporting(false);
-    }
+    setDownload({
+      blobs: ready.map((s) => sceneBlob(s)!),
+      filename: `${project.name}.mp4`,
+      title: project.name,
+      aspect:
+        activeVersion(ready[0])?.settings.aspectRatio ||
+        sceneSettings(ready[0]).aspectRatio,
+    });
   };
   return (
     <div className="editor">
@@ -177,15 +158,11 @@ export function Editor({
             {sequenceMode && (
               <button
                 className="button primary compact"
-                disabled={!ready.length || exporting || busy}
+                disabled={!ready.length || busy}
                 onClick={() => void exportVideo()}
               >
-                {exporting ? (
-                  <LoaderCircle size={15} className="spin" />
-                ) : (
-                  <Download size={15} />
-                )}
-                <span>{exporting ? "Exportando…" : "Exportar vídeo"}</span>
+                <Download size={15} />
+                <span>Exportar vídeo</span>
               </button>
             )}
           </div>
@@ -276,10 +253,11 @@ export function Editor({
                 className="text-button"
                 disabled={!sceneBlob(scene)}
                 onClick={() =>
-                  downloadBlob(
-                    sceneBlob(scene)!,
-                    `${project.name}-${scene.title || scene.order + 1}.mp4`,
-                  )
+                  setDownload({
+                    blobs: [sceneBlob(scene)!],
+                    filename: `${project.name}-${scene.title || scene.order + 1}.mp4`,
+                    title: scene.title || "Clip",
+                  })
                 }
               >
                 <Download size={14} />
@@ -472,6 +450,12 @@ export function Editor({
             ? "Selecciona clips en el proyecto y pulsa Añadir a secuencia. Podrás ordenarlos aquí y exportar un vídeo unido."
             : "Añade una escena para empezar a editar tu vídeo."}
         </Empty>
+      )}
+      {download && (
+        <VideoDownloadDialog
+          video={download}
+          onClose={() => setDownload(undefined)}
+        />
       )}
     </div>
   );

@@ -13,7 +13,8 @@ import { storeImage, downloadBlob } from "../lib/media";
 import { getApiKey } from "../lib/settings";
 import { errorMessage, generateImage, base64Blob } from "../lib/google";
 import * as db from "../lib/storage";
-import { sceneBlob } from "../types";
+import { VideoDownloadDialog } from "./VideoDownloadDialog";
+import { sceneBlob, type Scene } from "../types";
 import { Clip, Empty, IconButton } from "./common";
 export function Library({
   workspace: w,
@@ -24,6 +25,7 @@ export function Library({
   videos?: boolean;
   open: (id: string) => void;
 }) {
+  const [downloadClip, setDownloadClip] = useState<Scene>();
   const [search, setSearch] = useState("");
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -74,6 +76,16 @@ export function Library({
   }
   return (
     <div className="page library-page">
+      {downloadClip && (
+        <VideoDownloadDialog
+          video={{
+            blobs: [sceneBlob(downloadClip)!],
+            filename: `${downloadClip.title || "clip"}.mp4`,
+            title: downloadClip.title || "Clip",
+          }}
+          onClose={() => setDownloadClip(undefined)}
+        />
+      )}
       <div className="section-heading">
         <div>
           <span className="kicker">Tu material creativo</span>
@@ -192,12 +204,7 @@ export function Library({
                     </button>
                     <IconButton
                       label={`Descargar ${scene.title || "clip"}`}
-                      onClick={() =>
-                        downloadBlob(
-                          sceneBlob(scene)!,
-                          `${scene.title || "clip"}.mp4`,
-                        )
-                      }
+                      onClick={() => setDownloadClip(scene)}
                     >
                       <Download size={16} />
                     </IconButton>

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, LoaderCircle } from "lucide-react";
 import { sceneBlob, type Scene } from "../types";
 import { archiveClips, archiveNames } from "../lib/archive";
 import { downloadBlob } from "../lib/media";
+import type { DownloadResolution } from "../lib/videoQuality";
+import { DownloadProgress, DownloadQuality } from "./DownloadQuality";
 import { StudioDialog } from "./StudioDialog";
 export function DownloadDialog({
   scenes,
@@ -26,6 +28,12 @@ export function DownloadDialog({
   const [prefix, setPrefix] = useState(projectName);
   const [names, setNames] = useState<Record<string, string>>({});
   const [metadata, setMetadata] = useState(true);
+  const [resolution, setResolution] = useState<DownloadResolution>("original");
+  const [progress, setProgress] = useState<{ text: string; fraction?: number }>(
+    { text: "Preparando descarga…" },
+  );
+  const controller = useRef<AbortController | undefined>(undefined);
+  useEffect(() => () => controller.current?.abort(), []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const ready = scenes.filter(
@@ -40,21 +48,36 @@ export function DownloadDialog({
     prefix: naming === "prefix" ? prefix : undefined,
     names,
     includeMetadata: metadata,
+    resolution,
   };
   const filenames = archiveNames(ready, options);
   const size = ready.reduce((sum, s) => sum + sceneBlob(s)!.size, 0);
   const download = async () => {
+    if (busy) return;
+    const task = new AbortController();
+    controller.current = task;
+    setProgress({ text: "Preparando descarga…" });
     setBusy(true);
     setError("");
     try {
+      const zip = await archiveClips(ready, {
+        ...options,
+        signal: task.signal,
+        onProgress: setProgress,
+      });
+      task.signal.throwIfAborted();
       downloadBlob(
-        await archiveClips(ready, options),
-        `${projectName}-clips.zip`,
+        zip,
+        `${projectName}-clips${resolution === "original" ? "" : `-${resolution}`}.zip`,
       );
       onClose();
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "No se pudo preparar la descarga.",
+        task.signal.aborted
+          ? "Preparación cancelada. Puedes cambiar la resolución y volver a intentarlo."
+          : e instanceof Error
+            ? e.message
+            : "No se pudo preparar la descarga.",
       );
     } finally {
       setBusy(false);
@@ -63,14 +86,16 @@ export function DownloadDialog({
   return (
     <StudioDialog
       title="Descargar clips"
+      busy={busy}
       onClose={() => {
         if (!busy) onClose();
       }}
     >
       <p className="hint">
-        Vídeos originales, sin recomprimir, listos para tu editor local.
+        Elige los clips y la resolución. Se descargan juntos en un ZIP.
       </p>
       <fieldset disabled={busy} className="download-options">
+        <DownloadQuality value={resolution} onChange={setResolution} />
         <label>
           Qué descargar
           <select value={scope} onChange={(e) => setScope(e.target.value)}>
@@ -130,10 +155,22 @@ export function DownloadDialog({
       <p className="hint">
         {ready.length} {ready.length === 1 ? "vídeo" : "vídeos"} ·{" "}
         {(size / 1024 / 1024).toFixed(1)} MB
+        {resolution !== "original"
+          ? " de originales; el tamaño final cambiará"
+          : ""}
         {scope !== "selected"
           ? " · Los descartados se excluyen."
           : " · Solo se incluyen clips con vídeo."}
       </p>
+      {busy && <DownloadProgress progress={progress} />}
+      {busy && (
+        <button
+          className="button full"
+          onClick={() => controller.current?.abort()}
+        >
+          Cancelar preparación
+        </button>
+      )}
       {error && (
         <p className="inline-error" role="alert">
           {error}

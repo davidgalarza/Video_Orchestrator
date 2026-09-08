@@ -32,6 +32,7 @@ import { downloadBlob } from "../lib/media";
 import { clipFilename } from "../lib/archive";
 import { Clip, Empty, IconButton } from "./common";
 import { Editor } from "./Editor";
+import { VideoDownloadDialog } from "./VideoDownloadDialog";
 import { DownloadDialog } from "./DownloadDialog";
 import { CompareDialog } from "./CompareDialog";
 
@@ -54,6 +55,7 @@ export function ProjectWorkspace({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [downloading, setDownloading] = useState(false);
+  const [downloadClip, setDownloadClip] = useState<Scene>();
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [sort, setSort] = useState("recent");
   const [deleted, setDeleted] = useState<string>();
@@ -660,9 +662,7 @@ export function ProjectWorkspace({
                           <IconButton
                             label={`Descargar clip: ${scene.title || "Sin título"}`}
                             disabled={!blob}
-                            onClick={() =>
-                              downloadBlob(blob!, clipFilename(scene))
-                            }
+                            onClick={() => setDownloadClip(scene)}
                           >
                             <Download size={16} />
                           </IconButton>
@@ -741,6 +741,16 @@ export function ProjectWorkspace({
           </Empty>
         )}
       </div>
+      {downloadClip && (
+        <VideoDownloadDialog
+          video={{
+            blobs: [sceneBlob(downloadClip)!],
+            filename: clipFilename(downloadClip),
+            title: downloadClip.title || "Clip",
+          }}
+          onClose={() => setDownloadClip(undefined)}
+        />
+      )}
       {downloading && (
         <DownloadDialog
           scenes={scenes}

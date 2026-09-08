@@ -381,6 +381,9 @@ test("exports mixed silent/audio clips in a single playable MP4 using the local 
   await page
     .getByRole("button", { name: "Exportar vídeo", exact: true })
     .click();
+  await page
+    .getByRole("button", { name: "Descargar MP4", exact: true })
+    .click();
   const download = await downloaded;
   const outputPath = await download.path();
   expect(outputPath).toBeTruthy();
@@ -469,6 +472,9 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
       name: "Descargar clip: Primera escena",
       exact: true,
     })
+    .click();
+  await page
+    .getByRole("button", { name: "Descargar MP4", exact: true })
     .click();
   const single = await singleDownload;
   expect(readFileSync((await single.path())!).toString("base64")).toBe(clip);
@@ -1589,4 +1595,225 @@ test("reference uploads reject broken images and preserve the current selection"
   await expect(page.locator(".reference-guide-list")).toContainText(
     "Correcta.png",
   );
+});
+
+async function inspectVideoDownload(page: Page, bytes: Buffer) {
+  return page.evaluate(async (data) => {
+    const url = URL.createObjectURL(
+      new Blob([Uint8Array.from(atob(data), (c) => c.charCodeAt(0))], {
+        type: "video/mp4",
+      }),
+    );
+    const video = document.createElement("video") as HTMLVideoElement & {
+      captureStream: () => MediaStream;
+    };
+    video.muted = true;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        video.onloadeddata = () => resolve();
+        video.onerror = () =>
+          reject(new Error("El vídeo no se puede reproducir"));
+        video.src = url;
+      });
+      await video.play();
+      const stream = video.captureStream();
+      const result = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        duration: video.duration,
+        audio: stream.getAudioTracks().length,
+      };
+      stream.getTracks().forEach((track) => track.stop());
+      return result;
+    } finally {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(url);
+    }
+  }, bytes.toString("base64"));
+}
+
+async function replaceReviewVideo(
+  page: Page,
+  data: string,
+  title = "Original",
+) {
+  await page.evaluate(
+    async ({ data, title }) => {
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        const req = indexedDB.open("vid-gen-studio", 1);
+        req.onsuccess = () => resolve(req.result);
+      });
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction("scenes", "readwrite"),
+          store = tx.objectStore("scenes"),
+          req = store.getAll();
+        req.onsuccess = () => {
+          const scene = req.result.find((s) => s.title === title);
+          scene.versions[0].blob = new Blob(
+            [Uint8Array.from(atob(data), (c) => c.charCodeAt(0))],
+            { type: "video/mp4" },
+          );
+          store.put(scene);
+        };
+        tx.oncomplete = () => resolve();
+      });
+      db.close();
+    },
+    { data, title },
+  );
+  await page.reload();
+}
+
+test("downloads real 720p, 1080p and 4K files with audio and preserves the source", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.route(google, (route) => route.abort());
+  await page.goto("/");
+  await seedReviewClips(page);
+  let original = Buffer.from(clip, "base64");
+  for (const [quality, width, height] of [
+    ["720p", 720, 1280],
+    ["1080p", 1080, 1920],
+    ["4k", 2160, 3840],
+  ] as const) {
+    await page
+      .getByRole("button", { name: "Descargar clip: Original", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Descargar vídeo",
+      exact: true,
+    });
+    await dialog.getByLabel("Resolución de descarga").selectOption(quality);
+    await expect(dialog.locator(".download-dimensions")).toContainText(
+      `${width} × ${height}`,
+    );
+    if (quality === "1080p") {
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.screenshot({ path: "artifacts/download-quality-desktop.png" });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: "artifacts/download-quality-mobile.png" });
+      await expect(
+        dialog.getByRole("button", { name: "Descargar MP4", exact: true }),
+      ).toBeInViewport();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+    const pending = page.waitForEvent("download", { timeout: 90000 });
+    await dialog
+      .getByRole("button", { name: "Descargar MP4", exact: true })
+      .click();
+    const file = await pending;
+    expect(file.suggestedFilename()).toContain(`-${quality}.mp4`);
+    const bytes = readFileSync((await file.path())!);
+    const info = await inspectVideoDownload(page, bytes);
+    expect(info).toMatchObject({ width, height, audio: 1 });
+    expect(info.duration).toBeCloseTo(1, 1);
+    if (quality === "720p") {
+      original = bytes;
+      await replaceReviewVideo(page, bytes.toString("base64"));
+    }
+  }
+  await page
+    .getByRole("button", { name: "Descargar clip: Original", exact: true })
+    .click();
+  const pending = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Descargar MP4", exact: true })
+    .click();
+  expect(readFileSync((await (await pending).path())!)).toEqual(original);
+});
+
+test("cancels an active upscale and can restart the encoder", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.goto("/");
+  await seedReviewClips(page);
+  await page
+    .getByRole("button", { name: "Descargar clip: Original", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Descargar vídeo",
+    exact: true,
+  });
+  await dialog.getByLabel("Resolución de descarga").selectOption("4k");
+  await dialog
+    .getByRole("button", { name: "Descargar MP4", exact: true })
+    .click();
+  await expect(dialog.getByRole("status")).toContainText(
+    "Preparando 2160 × 3840",
+  );
+  await dialog
+    .getByRole("button", { name: "Cancelar preparación", exact: true })
+    .click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Preparación cancelada",
+  );
+  await expect(dialog.getByLabel("Resolución de descarga")).toBeEnabled();
+  await dialog.getByLabel("Resolución de descarga").selectOption("1080p");
+  const pending = page.waitForEvent("download", { timeout: 90000 });
+  await dialog
+    .getByRole("button", { name: "Descargar MP4", exact: true })
+    .click();
+  const bytes = readFileSync((await (await pending).path())!);
+  expect(await inspectVideoDownload(page, bytes)).toMatchObject({
+    width: 1080,
+    height: 1920,
+    audio: 1,
+  });
+});
+
+test("scaled ZIPs keep silent clips silent and record export resolution separately", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.goto("/");
+  await seedReviewClips(page);
+  await replaceReviewVideo(page, silent, "Editado");
+  await page
+    .getByRole("button", { name: "Descargar clips", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Descargar clips",
+    exact: true,
+  });
+  await dialog.getByLabel("Resolución de descarga").selectOption("1080p");
+  const pending = page.waitForEvent("download", { timeout: 90000 });
+  await dialog
+    .getByRole("button", { name: "Descargar 2 clips · ZIP", exact: true })
+    .click();
+  const file = await pending,
+    bytes = readFileSync((await file.path())!);
+  expect(file.suggestedFilename()).toContain("-1080p.zip");
+  const entries = new Map<string, Buffer>();
+  let offset = 0;
+  while (bytes.readUInt32LE(offset) === 0x04034b50) {
+    const size = bytes.readUInt32LE(offset + 18),
+      nameSize = bytes.readUInt16LE(offset + 26),
+      extra = bytes.readUInt16LE(offset + 28);
+    const name = bytes
+        .subarray(offset + 30, offset + 30 + nameSize)
+        .toString("utf8"),
+      start = offset + 30 + nameSize + extra;
+    entries.set(name, bytes.subarray(start, start + size));
+    offset = start + size;
+  }
+  const manifest = JSON.parse(entries.get("clips.json")!.toString());
+  for (const item of manifest) {
+    expect(item.settings.resolution).toBe("720p");
+    expect(item.download).toMatchObject({
+      resolution: "1080p",
+      processing: "lanczos",
+    });
+    expect(item.file).toContain("-1080p.mp4");
+    expect(
+      await inspectVideoDownload(page, entries.get(item.file)!),
+    ).toMatchObject({
+      width: item.title === "Original" ? 1080 : 1920,
+      height: item.title === "Original" ? 1920 : 1080,
+      audio: item.title === "Original" ? 1 : 0,
+    });
+  }
 });
