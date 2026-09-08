@@ -392,3 +392,55 @@ describe("independent generated clips", () => {
     ]);
   });
 });
+
+describe("review and queue preferences", () => {
+  it("persists favorites, discarded clips, priority and batch cancellation without changing an active task", async () => {
+    const project = await db.createProject(
+      "Activity",
+      [{ title: "Clip", prompt: "prompt" }],
+      DEFAULT_VIDEO,
+    );
+    const source = (await db.readWorkspace()).scenes.find(
+      (s) => s.project_id === project.id,
+    )!;
+    const request = {
+      id: "managed-1",
+      batchId: "batch",
+      sceneId: source.id,
+      task: {
+        mode: "generate" as const,
+        prompt: "prompt",
+        settings: DEFAULT_VIDEO,
+        started_at: "today",
+      },
+      images: [],
+      index: 1,
+      total: 3,
+      created_at: "today",
+    };
+    const items = await db.enqueueClipOutputs([
+      request,
+      { ...request, id: "managed-2", index: 2 },
+      { ...request, id: "managed-3", index: 3 },
+    ]);
+    await db.startQueuedGeneration(items[0]);
+    await db.patchScene(source.id, {
+      review: "favorite",
+      task: { ...request.task, remoteId: "in-progress" },
+    });
+    await db.patchScene(items[1].sceneId, { review: "discarded" });
+    await db.updateQueuedOrder([items[2].id, items[1].id]);
+    expect(
+      (await db.getScene(items[2].sceneId))?.generation_queue?.[0].queueOrder,
+    ).toBe(0);
+    await db.updateQueuedOrder([], [items[1].id, items[2].id]);
+    expect((await db.getScene(source.id))?.task?.remoteId).toBe("in-progress");
+    expect((await db.getScene(source.id))?.review).toBe("favorite");
+    expect((await db.getScene(items[1].sceneId))?.review).toBe("discarded");
+    expect(
+      (await db.readWorkspace()).scenes
+        .filter((s) => s.project_id === project.id)
+        .flatMap((s) => s.generation_queue || []),
+    ).toHaveLength(0);
+  });
+});

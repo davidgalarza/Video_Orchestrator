@@ -1,20 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useBlobUrl } from "../lib/useBlobUrl";
 import { Film, LoaderCircle, Plus, X } from "lucide-react";
 import { OMNI_MODEL, VEO_MODEL, type VideoSettings } from "../types";
 
-function useBlobUrl(blob?: Blob) {
-  const [url, setUrl] = useState<string>();
-  useEffect(() => {
-    const next = blob ? URL.createObjectURL(blob) : undefined;
-    // Object URL lifetime follows the mounted media, never the persisted record.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUrl(next);
-    return () => {
-      if (next) URL.revokeObjectURL(next);
-    };
-  }, [blob]);
-  return url;
-}
 export function Clip({
   blob,
   poster,

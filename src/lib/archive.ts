@@ -98,12 +98,47 @@ export function clipFilename(scene: Scene, index?: number) {
     : 1;
   return `${index === undefined ? "" : `${String(index + 1).padStart(3, "0")}-`}${title}-v${number}.mp4`;
 }
-export async function archiveClips(scenes: Scene[]) {
+export interface ArchiveOptions {
+  prefix?: string;
+  names?: Record<string, string>;
+  includeMetadata?: boolean;
+}
+export function archiveNames(scenes: Scene[], options: ArchiveOptions = {}) {
+  const used = new Set<string>();
+  return scenes.map((scene, index) => {
+    const proposed =
+      options.names?.[scene.id]?.trim() ||
+      (options.prefix?.trim()
+        ? `${options.prefix.trim()}-${String(index + 1).padStart(3, "0")}`
+        : clipFilename(scene, index));
+    let base =
+      proposed
+        .replace(/\.mp4$/i, "")
+        .replace(/[<>:"/\\|?*]/g, "-")
+        .split("")
+        .map((char) => (char.charCodeAt(0) < 32 ? "-" : char))
+        .join("")
+        .replace(/^\.+|[. ]+$/g, "")
+        .slice(0, 100) || "Clip";
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base))
+      base = `Clip-${base}`;
+    let name = `${base}.mp4`,
+      suffix = 2;
+    while (used.has(name.toLocaleLowerCase())) name = `${base}-${suffix++}.mp4`;
+    used.add(name.toLocaleLowerCase());
+    return name;
+  });
+}
+export async function archiveClips(
+  scenes: Scene[],
+  options: ArchiveOptions = {},
+) {
   const ready = scenes.filter((scene) => sceneBlob(scene));
   if (!ready.length)
     throw new Error("La selección no contiene vídeos generados.");
+  const names = archiveNames(ready, options);
   const files = ready.map((scene, i) => ({
-    name: clipFilename(scene, i),
+    name: names[i],
     blob: sceneBlob(scene)!,
   }));
   const manifest = ready.map((scene, i) => ({
@@ -112,7 +147,11 @@ export async function archiveClips(scenes: Scene[]) {
     prompt: activeVersion(scene)?.prompt || scene.prompt,
     settings: activeVersion(scene)?.settings || sceneSettings(scene),
     version_id: activeVersion(scene)?.id,
+    duration: activeVersion(scene)?.duration || sceneSettings(scene).duration,
+    origin: scene.origin,
+    favorite: scene.review === "favorite",
   }));
+  if (options.includeMetadata === false) return createZip(files);
   return createZip([
     ...files,
     {

@@ -88,3 +88,36 @@ describe("portable clip archives", () => {
     ).rejects.toThrow("4 GB");
   });
 });
+
+describe("custom download names", () => {
+  it("sanitizes user names and keeps colliding files distinct without metadata when disabled", async () => {
+    const base: Scene = {
+      id: "a",
+      project_id: "p",
+      title: "Clip",
+      order: 0,
+      prompt: "prompt",
+      status: "completed",
+      video_blob: new Blob(["original"]),
+      created_at: "today",
+      updated_at: "today",
+    };
+    const files = readZip(
+      new Uint8Array(
+        await (
+          await archiveClips([base, { ...base, id: "b" }], {
+            names: { a: "../Same/clip.mp4", b: "../Same/clip.mp4" },
+            includeMetadata: false,
+          })
+        ).arrayBuffer(),
+      ),
+    );
+    const names = Object.keys(files);
+    expect(names).toHaveLength(2);
+    expect(names[0]).not.toEqual(names[1]);
+    expect(
+      names.every((n) => !n.includes("/") && files[n] === "original"),
+    ).toBe(true);
+    expect(files["clips.json"]).toBeUndefined();
+  });
+});

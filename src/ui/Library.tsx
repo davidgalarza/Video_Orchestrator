@@ -34,6 +34,7 @@ export function Library({
   );
   const clips = w.scenes.filter(
     (s) =>
+      s.review !== "discarded" &&
       sceneBlob(s) &&
       `${s.title} ${s.prompt}`
         .toLocaleLowerCase()

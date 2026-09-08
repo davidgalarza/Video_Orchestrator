@@ -71,12 +71,16 @@ export interface QueuedGeneration {
   total: number;
   created_at: string;
   resume?: boolean;
+  batchId?: string;
+  queueOrder?: number;
 }
 export interface Scene {
   id: string;
   project_id: string;
   order: number;
   title?: string;
+  review?: "favorite" | "discarded";
+  generation_batch?: string;
   prompt: string;
   edit_prompt?: string;
   extend_prompt?: string;

@@ -2484,3 +2484,253 @@ button {
     display: none;
   }
 }
+
+.studio-dialog {
+  margin: auto;
+  width: min(600px, calc(100vw - 32px));
+  max-height: 90dvh;
+  padding: 0;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.studio-dialog::backdrop {
+  background: #000a;
+}
+.studio-dialog.is-wide {
+  width: min(1120px, calc(100vw - 32px));
+}
+.studio-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.studio-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.studio-dialog h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+.studio-dialog h3 {
+  font-size: 0.9rem;
+}
+.studio-dialog-content {
+  padding: 24px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.studio-dialog .hint {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.download-options {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+}
+.check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.download-options > label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.download-options > .check-row {
+  flex-direction: row;
+  align-items: center;
+}
+.download-names > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+}
+.download-names summary {
+  cursor: pointer;
+  min-height: 44px;
+  font-size: 0.83rem;
+}
+.download-names {
+  max-height: 290px;
+  overflow-y: auto;
+}
+.download-names small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.compare-side {
+  min-width: 0;
+}
+.compare-side h3 {
+  overflow-wrap: anywhere;
+  margin-top: 0;
+}
+.compare-side video {
+  width: 100%;
+  height: min(46dvh, 440px);
+  object-fit: contain;
+  background: #090a0b;
+  border-radius: 6px;
+}
+.compare-side > button {
+  margin: 8px 0 16px;
+  min-height: 44px;
+}
+.compare-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.compare-controls label {
+  margin: 0 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.compare-controls select {
+  width: auto;
+}
+.compare-timeline {
+  font-size: 0.8rem;
+}
+.compare-timeline input {
+  padding: 0;
+  height: 36px;
+  accent-color: #d5d9d5;
+}
+.clip-favorite {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 44px;
+  height: 44px;
+  background: #141619d9;
+  color: #c0c5cb;
+}
+.clip-favorite.is-favorite {
+  color: #e4cb87;
+}
+.compare-origin {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  min-height: 36px;
+}
+.activity-current {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 0 24px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 24px;
+}
+.activity-current p {
+  font-size: 0.83rem;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.activity-current small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.activity-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.activity-list li > div {
+  flex: 1;
+  min-width: 0;
+}
+.activity-list .text-button {
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.activity-list small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 6px;
+}
+.activity-number {
+  width: 22px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.activity-list .cancel-batch {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 8px;
+  min-height: 32px;
+}
+.studio-dialog .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+@media (max-width: 760px) {
+  .studio-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .project-clips .editor-top > .inline {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .studio-dialog > header,
+  .studio-dialog-content {
+    padding: 16px;
+  }
+  .compare-grid {
+    gap: 10px;
+  }
+  .compare-side video {
+    height: 30dvh;
+  }
+  .compare-side h3 {
+    font-size: 0.78rem;
+  }
+  .compare-controls {
+    gap: 8px;
+  }
+  .compare-controls label {
+    margin-left: 0;
+  }
+}

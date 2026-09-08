@@ -12,6 +12,7 @@ async function createProject(page: Page, sceneCount = 1) {
     .locator(".home-page")
     .getByRole("button", { name: "Nuevo proyecto", exact: true })
     .click();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
@@ -161,6 +162,7 @@ test("editor workflow: key, blank project, references, versions, persistence and
     input: expect.stringContaining("Extend this video"),
   });
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
@@ -264,6 +266,7 @@ test("paused generations recover after reload without creating a second video", 
   ).toBeVisible();
   ready = true;
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
@@ -356,6 +359,7 @@ test("exports mixed silent/audio clips in a single playable MP4 using the local 
     { clip, silent },
   );
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page.getByLabel("Seleccionar clips visibles", { exact: true }).check();
   await page
     .getByRole("button", { name: "Añadir a secuencia", exact: true })
@@ -432,6 +436,7 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
     { clip, silent },
   );
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await expect(
     page.getByRole("heading", { name: /Clips del proyecto/ }),
   ).toBeVisible();
@@ -440,6 +445,9 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
   await expect(page.locator(".selection-note")).toContainText("2 clips");
   const downloaded = page.waitForEvent("download");
   await page.getByRole("button", { name: /Descargar seleccionados/ }).click();
+  await page
+    .getByRole("button", { name: "Descargar 2 clips · ZIP", exact: true })
+    .click();
   const zip = await downloaded;
   expect(zip.suggestedFilename()).toMatch(/-clips.zip$/);
   const bytes = readFileSync((await zip.path())!);
@@ -505,6 +513,7 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
     .click();
   await expect(page.locator(".scene-card").first()).toContainText("Escena 2");
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await expect(page.locator(".project-clip")).toHaveCount(3);
   await page
     .getByRole("button", { name: "Secuencia · 2", exact: true })
@@ -649,6 +658,7 @@ test("settings returns to the draft, optional references stay compact and trash 
     .click();
   await expect(page.locator(".project-clip")).toHaveCount(1);
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page.getByLabel("Filtrar clips").selectOption("trash");
   await expect(page.locator(".project-clip")).toHaveCount(1);
   await page.getByRole("button", { name: "Restaurar", exact: true }).click();
@@ -695,6 +705,7 @@ test("edit instructions persist and mobile switches between configuration and th
     .getByRole("button", { name: "Cerrar editor de clip", exact: true })
     .click();
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
@@ -844,6 +855,7 @@ test("waiting clips survive pause and reload and can be cancelled without new pa
     page.getByRole("button", { name: "Continuar cola", exact: true }),
   ).toBeVisible();
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await expect(page.locator(".job-bar")).toContainText("2 en espera");
   await expect(page.locator(".job-bar")).toContainText("Cola pausada");
   expect(posts).toBe(1);
@@ -859,6 +871,7 @@ test("waiting clips survive pause and reload and can be cancelled without new pa
     .click();
   await expect(page.locator(".clip-generation")).toHaveCount(0);
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await expect(page.locator(".job-bar")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Recuperar resultado", exact: true }),
@@ -908,6 +921,7 @@ test("recovering an interrupted batch resumes its remaining clips exactly once",
     page.getByRole("button", { name: "Continuar cola", exact: true }),
   ).toBeVisible();
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   ready = true;
   await page
     .getByRole("button", { name: "Recuperar resultado", exact: true })
@@ -1014,6 +1028,7 @@ test("existing grouped results can be separated into independently downloadable 
     database.close();
   }, clip);
   await page.reload();
+  await page.getByLabel("Ordenar clips").selectOption("order");
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
@@ -1033,4 +1048,305 @@ test("existing grouped results can be separated into independently downloadable 
   await expect(
     page.getByRole("button", { name: /Descargar seleccionados/ }),
   ).toBeEnabled();
+});
+
+async function seedReviewClips(page: Page) {
+  await createProject(page, 2);
+  await page.evaluate(async (data) => {
+    const database = await new Promise<IDBDatabase>((resolve) => {
+      const request = indexedDB.open("vid-gen-studio", 1);
+      request.onsuccess = () => resolve(request.result);
+    });
+    await new Promise<void>((resolve) => {
+      const tx = database.transaction("scenes", "readwrite");
+      const request = tx.objectStore("scenes").getAll();
+      request.onsuccess = () => {
+        const scenes = request.result.sort((a, b) => a.order - b.order);
+        scenes.forEach((scene, i) =>
+          tx.objectStore("scenes").put({
+            ...scene,
+            title: i ? "Editado" : "Original",
+            origin: i
+              ? { sceneId: scenes[0].id, title: "Original", mode: "edit" }
+              : undefined,
+            status: "completed",
+            updated_at: `2026-01-0${i + 1}`,
+            versions: [
+              {
+                id: `review-${i}`,
+                blob: new Blob(
+                  [Uint8Array.from(atob(data), (c) => c.charCodeAt(0))],
+                  { type: "video/mp4" },
+                ),
+                prompt: i ? "Luz cálida" : "Un paisaje al amanecer",
+                settings: scene.settings,
+                mode: i ? "edit" : "generate",
+                duration: 8,
+                interactionId: `source-${i}`,
+                created_at: "today",
+              },
+            ],
+            active_version_id: `review-${i}`,
+          }),
+        );
+      };
+      tx.oncomplete = () => resolve();
+    });
+    database.close();
+  }, clip);
+  await page.reload();
+}
+
+test("favorites and discarded persist and reuse opens a fresh draft with the original settings", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.route(google, (route) => {
+    requests++;
+    return route.abort();
+  });
+  await page.goto("/");
+  await seedReviewClips(page);
+  await expect(page.getByLabel("Ordenar clips")).toHaveValue("recent");
+  await expect(page.locator(".project-clip").first()).toContainText("Editado");
+  await page
+    .getByRole("button", { name: "Marcar favorito: Original", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Descartar clip: Editado", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(1);
+  await page.reload();
+  await page.getByLabel("Filtrar clips").selectOption("favorites");
+  await expect(page.locator(".project-clip")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", {
+      name: "Quitar favorito: Original",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Filtrar clips").selectOption("discarded");
+  await expect(page.locator(".project-clip")).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Recuperar descartado: Editado", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(0);
+  await page.getByLabel("Filtrar clips").selectOption("all");
+  await page
+    .getByRole("button", { name: "Crear otro parecido: Original", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByLabel("¿Qué ocurre en esta toma?")).toHaveValue(
+    "Un paisaje al amanecer",
+  );
+  await expect(page.getByLabel("Nombre de la escena")).toHaveValue(
+    "Original · parecido",
+  );
+  await expect(page.locator(".preview-frame video")).toHaveCount(0);
+  expect(requests).toBe(0);
+});
+
+test("comparison synchronizes playback and seeking and lets a user keep a favorite", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await seedReviewClips(page);
+  await page.getByLabel("Seleccionar clip: Original", { exact: true }).check();
+  await page.getByLabel("Seleccionar clip: Editado", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Comparar 2 clips", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Comparar clips" });
+  await expect(
+    dialog.getByRole("button", { name: "Reproducir ambos", exact: true }),
+  ).toBeEnabled();
+  await dialog
+    .getByRole("button", { name: "Reproducir ambos", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      dialog
+        .locator("video")
+        .evaluateAll((videos) =>
+          videos.every((v) => (v as HTMLVideoElement).currentTime > 0),
+        ),
+    )
+    .toBe(true);
+  if (
+    await dialog
+      .getByRole("button", { name: "Pausar ambos", exact: true })
+      .isVisible()
+  )
+    await dialog
+      .getByRole("button", { name: "Pausar ambos", exact: true })
+      .click();
+  await dialog.getByRole("slider").fill("0.4");
+  await expect
+    .poll(() =>
+      dialog
+        .locator("video")
+        .evaluateAll((videos) =>
+          videos.every(
+            (v) => Math.abs((v as HTMLVideoElement).currentTime - 0.4) < 0.03,
+          ),
+        ),
+    )
+    .toBe(true);
+  await dialog.getByLabel("Audio", { exact: true }).selectOption("0");
+  expect(
+    await dialog
+      .locator("video")
+      .evaluateAll((videos) =>
+        videos.map((v) => (v as HTMLVideoElement).muted),
+      ),
+  ).toEqual([false, true]);
+  await dialog
+    .getByRole("button", { name: "☆ Marcar favorito", exact: true })
+    .first()
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "★ Favorito", exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "artifacts/compare-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/compare-mobile.png" });
+  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+    true,
+  );
+  await dialog
+    .getByRole("button", { name: "Cerrar comparar clips", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Comparar 2 clips", exact: true }),
+  ).toBeFocused();
+});
+
+test("download favorites previews safe custom filenames and exports only those originals", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await seedReviewClips(page);
+  await page
+    .getByRole("button", { name: "Marcar favorito: Original", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Descargar clips", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Descargar clips" });
+  await expect(dialog.getByLabel("Qué descargar")).toHaveValue("favorites");
+  await dialog.getByLabel("Nombres de archivo").selectOption("prefix");
+  await dialog
+    .getByLabel("Nombre común", { exact: true })
+    .fill("Mi proyecto/video");
+  await dialog.locator("summary").click();
+  await expect(
+    dialog.getByText("Mi proyecto-video-001.mp4", { exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "artifacts/download-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/download-mobile.png" });
+  const pending = page.waitForEvent("download");
+  await dialog
+    .getByRole("button", { name: "Descargar 1 clip · ZIP", exact: true })
+    .click();
+  const bytes = readFileSync((await (await pending).path())!);
+  const entries = new Map<string, Buffer>();
+  let offset = 0;
+  while (bytes.readUInt32LE(offset) === 0x04034b50) {
+    const size = bytes.readUInt32LE(offset + 18),
+      nameSize = bytes.readUInt16LE(offset + 26),
+      extra = bytes.readUInt16LE(offset + 28);
+    const name = bytes
+      .subarray(offset + 30, offset + 30 + nameSize)
+      .toString("utf8");
+    const start = offset + 30 + nameSize + extra;
+    entries.set(name, bytes.subarray(start, start + size));
+    offset = start + size;
+  }
+  expect([...entries.keys()]).toEqual([
+    "Mi proyecto-video-001.mp4",
+    "clips.json",
+  ]);
+  expect(entries.get("Mi proyecto-video-001.mp4")!.toString("base64")).toBe(
+    clip,
+  );
+  expect(
+    JSON.parse(entries.get("clips.json")!.toString("utf8"))[0],
+  ).toMatchObject({
+    favorite: true,
+    prompt: "Un paisaje al amanecer",
+    file: "Mi proyecto-video-001.mp4",
+  });
+});
+
+test("activity prioritizes a pending clip and cancels a batch after reload without touching the active request", async ({
+  page,
+}) => {
+  let posts = 0;
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, (route) => {
+    if (route.request().method() === "POST") posts++;
+    return route.fulfill({
+      json: { id: "activity-active", status: "in_progress" },
+    });
+  });
+  await page.goto("/");
+  await createProject(page);
+  await page.getByLabel("Cantidad de clips").fill("3");
+  await page
+    .getByRole("button", { name: "Generar 3 clips", exact: true })
+    .click();
+  await expect.poll(() => posts).toBe(1);
+  await page
+    .getByRole("button", { name: "Ver actividad", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Actividad" });
+  await dialog
+    .getByRole("button", {
+      name: "Generar antes: Primera escena · Toma 2",
+      exact: true,
+    })
+    .click();
+  await expect(dialog.locator("li").first()).toContainText("Toma 2");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "artifacts/activity-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/activity-mobile.png" });
+  await dialog
+    .getByRole("button", { name: "Cerrar actividad", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Pausar seguimiento de la generación",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Continuar cola", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Ver actividad", exact: true })
+    .click();
+  await expect(dialog.locator("li").first()).toContainText("Toma 2");
+  await dialog
+    .getByRole("button", { name: "Cancelar tanda · 2 pendientes", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("heading", {
+      name: "Resultados por recuperar",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "Cerrar actividad", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Recuperar resultado", exact: true }),
+  ).toBeVisible();
+  expect(posts).toBe(1);
 });

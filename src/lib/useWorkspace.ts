@@ -91,6 +91,8 @@ export function useWorkspace() {
             .sort(
               (a, b) =>
                 Number(!!b.resume) - Number(!!a.resume) ||
+                (a.queueOrder ?? Number.MAX_SAFE_INTEGER) -
+                  (b.queueOrder ?? Number.MAX_SAFE_INTEGER) ||
                 a.created_at.localeCompare(b.created_at),
             );
           queueRef.current = pending;
@@ -166,6 +168,7 @@ export function useWorkspace() {
           throw new Error("Elige entre 1 y 20 clips por solicitud.");
         const current = await db.readWorkspace();
         const items: QueuedGeneration[] = [];
+        const batchId = crypto.randomUUID();
         for (const id of new Set(ids)) {
           const scene = current.scenes.find((s) => s.id === id);
           if (!scene) throw new Error("El clip ya no está disponible.");
@@ -245,6 +248,7 @@ export function useWorkspace() {
           for (let index = 1; index <= total; index++)
             items.push({
               id: crypto.randomUUID(),
+              batchId,
               sceneId: id,
               task: { ...task },
               images,
@@ -404,12 +408,46 @@ export function useWorkspace() {
       setJob(null);
     }
   }
+  function manageQueue(cancelIds: string[] = [], prioritizeId?: string) {
+    const update = async () => {
+      const cancelled = new Set(cancelIds);
+      const remaining = queueRef.current.filter((q) => !cancelled.has(q.id));
+      const ordered = prioritizeId
+        ? [
+            ...remaining.filter((q) => q.id === prioritizeId),
+            ...remaining.filter((q) => q.id !== prioritizeId),
+          ]
+        : remaining;
+      await db.updateQueuedOrder(
+        ordered.map((q) => q.id),
+        cancelIds,
+      );
+      const rank = new Map(ordered.map((q, index) => [q.id, index]));
+      queueRef.current = queueRef.current
+        .filter((q) => !cancelled.has(q.id))
+        .map((q) => ({ ...q, queueOrder: rank.get(q.id) ?? q.queueOrder }))
+        .sort(
+          (a, b) =>
+            (a.queueOrder ?? Number.MAX_SAFE_INTEGER) -
+            (b.queueOrder ?? Number.MAX_SAFE_INTEGER),
+        );
+      publishQueue();
+      await refresh();
+    };
+    const result = admission.current
+      .then(update)
+      .catch((e) => notify(errorMessage(e), true));
+    admission.current = result;
+    return result;
+  }
   return {
     ...data,
     loading,
     notice,
     setNotice,
     job,
+    prioritize: (id: string) => manageQueue([], id),
+    cancelRequests: (ids: string[]) => manageQueue(ids),
     queue,
     queuePaused,
     recovery,
@@ -432,13 +470,9 @@ export function useWorkspace() {
       void drain();
     },
     cancelQueued: (sceneId: string) =>
-      action(async () => {
-        await db.cancelQueuedGenerations(sceneId);
-        queueRef.current = queueRef.current.filter(
-          (q) => q.sceneId !== sceneId,
-        );
-        publishQueue();
-      }),
+      manageQueue(
+        queueRef.current.filter((q) => q.sceneId === sceneId).map((q) => q.id),
+      ),
   };
 }
 export type WorkspaceController = ReturnType<typeof useWorkspace>;

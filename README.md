@@ -6,6 +6,9 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 
 - Generar vídeos con **Gemini Omni 1.1 Flash** usando tu propia API key de Google AI Studio. También se mantiene Veo 3.1.
 - Organizar cada proyecto como una biblioteca de clips, con búsqueda, filtros, prompts, referencias y versiones.
+- Marcar favoritos y ocultar descartados sin borrar sus vídeos; recuperarlos desde el filtro **Descartados**.
+- Comparar dos clips con reproducción, desplazamiento y selección de audio compartidos. Los clips derivados permiten **Comparar con origen** directamente.
+- Usar **Crear otro parecido** para abrir un borrador con el prompt, los ajustes y las referencias reutilizados, sin iniciar una generación.
 - Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
 - Recuperar clips eliminados desde la papelera o con **Deshacer**, conservando sus versiones y su posición en la secuencia.
 - Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
@@ -22,6 +25,10 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 
 El proyecto abre en **Clips del proyecto**. Usa **Nuevo clip** o abre uno existente para generar, revisar versiones y descargarlo en un modal individual. Al cerrarlo, vuelves a la biblioteca y los cambios quedan guardados. Para seguir en un editor local, selecciona clips y pulsa **Descargar seleccionados · ZIP**: se incluye la versión activa de cada vídeo, sin recomprimir. Los borradores se excluyen y los nombres llevan un índice para evitar colisiones. El ZIP admite hasta 4 GB; para más material, descarga por grupos.
 
+**Descargar clips** permite elegir seleccionados, favoritos o todos los disponibles. Puedes usar los nombres de los clips, un nombre común numerado o personalizar cada archivo. La vista previa muestra los nombres seguros definitivos y resuelve duplicados. Los prompts, ajustes, duración y origen se incluyen opcionalmente en `clips.json`. Los descartados se excluyen de Favoritos y Todos; puedes seleccionarlos explícitamente si quieres descargarlos.
+
+Selecciona exactamente dos clips con vídeo y pulsa **Comparar 2 clips**. Ambos comparten reproducción y desplazamiento; puedes escuchar uno a la vez y marcar el favorito sin salir. Si las duraciones difieren, el más corto conserva su último fotograma mientras continúa el otro.
+
 Para un montaje rápido, selecciona clips y pulsa **Añadir a secuencia**. Ordena las tomas con las flechas, usa **Quitar de secuencia** para excluirlas y **Exportar vídeo** para unirlas. **Todos los clips** vuelve a la biblioteca. El orden del montaje se guarda aparte; los proyectos antiguos conservan su secuencia original.
 
 En el modal, escribe el prompt y ajusta la salida; las referencias son opcionales y se despliegan cuando las necesitas. Las instrucciones de edición y extensión también se guardan. Puedes preparar otro clip mientras se genera uno y volver desde Ajustes al clip abierto. En móvil, alterna entre **Configurar** y **Vista previa**. En la biblioteca puedes ordenar, filtrar los clips **Por revisar** y recuperar resultados pendientes directamente.
@@ -33,6 +40,8 @@ En el modal, escribe el prompt y ajusta la salida; las referencias son opcionale
 Los resultados guardados con el flujo anterior siguen disponibles en **Resultados anteriores**. **Separar en clips** conserva la toma activa en su tarjeta y convierte las demás en clips independientes, sin volver a generar ni perder archivos.
 
 La cola procesa una solicitud cada vez y puedes añadir otras mientras trabaja. **Cancelar pendientes** retira las solicitudes que todavía no han empezado de ese clip. **Pausar seguimiento** detiene el seguimiento local y la cola, sin cancelar la operación que Google ya recibió. Mantén la pestaña abierta para que siga avanzando. Tras recargar, las solicitudes pendientes se conservan pausadas: usa **Recuperar resultado** si hay una operación interrumpida o **Continuar cola** para las que aún no se enviaron. Un error detiene la cola y conserva lo restante. **Reintentar clip** utiliza la solicitud guardada en esa misma tarjeta, incluyendo el vídeo base de una edición o extensión.
+
+La cola no añade pasos al generar. **Ver actividad** abre un panel opcional con el clip activo y los próximos. La flecha adelanta un clip al siguiente turno; puedes cancelar una solicitud o los pendientes de una tanda completa. Las prioridades y cancelaciones se conservan al recargar. La solicitud en curso permanece intacta. El panel también muestra resultados por recuperar.
 
 ## Inicio local
 

@@ -138,6 +138,7 @@ export async function enqueueClipOutputs(items: QueuedGeneration[]) {
           },
         };
     const request = { ...item, sceneId: target.id };
+    target.generation_batch = item.batchId;
     target.output_request = { task: item.task, images: item.images };
     target.generation_queue = [request];
     await store.put(target);
@@ -227,6 +228,25 @@ export async function startQueuedGeneration(item: QueuedGeneration) {
 export async function cancelQueuedGenerations(sceneId: string) {
   await patchScene(sceneId, { generation_queue: [] });
 }
+export async function updateQueuedOrder(
+  ids: string[],
+  cancelIds: string[] = [],
+) {
+  const database = await connection;
+  const tx = database.transaction("scenes", "readwrite");
+  const ranks = new Map(ids.map((id, index) => [id, index]));
+  const cancelled = new Set(cancelIds);
+  for (const scene of await tx.store.getAll()) {
+    if (!scene.generation_queue?.length) continue;
+    await tx.store.put({
+      ...scene,
+      generation_queue: scene.generation_queue
+        .filter((q) => !cancelled.has(q.id))
+        .map((q) => ({ ...q, queueOrder: ranks.get(q.id) ?? q.queueOrder })),
+    });
+  }
+  await tx.done;
+}
 export async function createProject(
   name: string,
   drafts: { title: string; prompt: string }[],
@@ -311,10 +331,14 @@ export async function saveVersion(sceneId: string, version: ClipVersion) {
 export async function duplicateScene(id: string) {
   const source = await getScene(id);
   if (!source) throw new Error("Escena no encontrada.");
-  const copy = await addScene(source.project_id, sceneSettings(source));
+  const version = activeVersion(source);
+  const copy = await addScene(
+    source.project_id,
+    version?.settings || sceneSettings(source),
+  );
   return patchScene(copy.id, {
-    title: `${source.title || "Escena"} · copia`,
-    prompt: source.prompt,
+    title: `${(source.title || "Clip").slice(0, 42)} · parecido`,
+    prompt: version?.mode === "generate" ? version.prompt : source.prompt,
     first_frame_asset_id: source.first_frame_asset_id,
     last_frame_asset_id: source.last_frame_asset_id,
     reference_asset_ids: source.reference_asset_ids,

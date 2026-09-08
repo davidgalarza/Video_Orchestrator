@@ -24,6 +24,7 @@ import { downloadBlob } from "../lib/media";
 import { Home } from "./Home";
 import { ProjectWorkspace } from "./ProjectWorkspace";
 import { Settings } from "./Settings";
+import { QueueActivity } from "./QueueActivity";
 import { Library } from "./Library";
 import { Dismiss, IconButton } from "./common";
 
@@ -34,6 +35,7 @@ export function StudioApp() {
   const w = useWorkspace();
   const [route, setRoute] = useState(currentRoute);
   const [menu, setMenu] = useState(false);
+  const [activity, setActivity] = useState(false);
   const [settingsReturn, setSettingsReturn] = useState<{
     projectId: string;
     clipId?: string;
@@ -304,16 +306,8 @@ export function StudioApp() {
                 {w.queue.length} en espera · Mantén esta pestaña abierta
               </small>
             </span>
-            <button
-              className="text-button"
-              onClick={() => {
-                const scene = w.scenes.find(
-                  (s) => s.id === (w.job?.sceneId || w.queue[0]?.sceneId),
-                );
-                if (scene) open(scene.project_id);
-              }}
-            >
-              Ver proyecto
+            <button className="text-button" onClick={() => setActivity(true)}>
+              Ver actividad
             </button>
             {!w.job && w.queue.length > 0 ? (
               <button className="text-button" onClick={w.continueQueue}>
@@ -330,6 +324,13 @@ export function StudioApp() {
           </div>
         )}
       </div>
+      {activity && (
+        <QueueActivity
+          workspace={w}
+          onClose={() => setActivity(false)}
+          openProject={open}
+        />
+      )}
       {w.notice && (
         <div
           className={`toast ${w.notice.error ? "toast-error" : ""}`}

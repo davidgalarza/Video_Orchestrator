@@ -13,6 +13,9 @@ import {
   Search,
   X,
   RotateCcw,
+  Star,
+  CircleSlash,
+  Columns2,
 } from "lucide-react";
 import {
   activeVersion,
@@ -26,9 +29,11 @@ import type { WorkspaceController } from "../lib/useWorkspace";
 import * as db from "../lib/storage";
 import { getDefaults } from "../lib/settings";
 import { downloadBlob } from "../lib/media";
-import { archiveClips, clipFilename } from "../lib/archive";
+import { clipFilename } from "../lib/archive";
 import { Clip, Empty, IconButton } from "./common";
 import { Editor } from "./Editor";
+import { DownloadDialog } from "./DownloadDialog";
+import { CompareDialog } from "./CompareDialog";
 
 export function ProjectWorkspace({
   project,
@@ -48,14 +53,20 @@ export function ProjectWorkspace({
   const [selection, setSelection] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [packing, setPacking] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
   const [sort, setSort] = useState("recent");
   const [deleted, setDeleted] = useState<string>();
   const [creating, setCreating] = useState(false);
   const focusReturn = useRef<HTMLElement | null>(null);
   const scenes = w.scenes.filter((s) => s.project_id === project.id);
   const sequence = sequenceScenes(project, scenes);
-  const selected = scenes.filter((s) => selection.includes(s.id));
+  const selected = selection.flatMap(
+    (id) => scenes.find((s) => s.id === id) || [],
+  );
+  const comparing = compareIds.flatMap(
+    (id) => scenes.find((s) => s.id === id) || [],
+  );
   const selectedReady = selected.filter((s) => sceneBlob(s));
   const trash = w.trash.filter((s) => s.project_id === project.id);
   const visible = (filter === "trash" ? trash : scenes).filter(
@@ -63,13 +74,20 @@ export function ProjectWorkspace({
       `${s.title || ""} ${s.prompt}`
         .toLocaleLowerCase()
         .includes(search.toLocaleLowerCase()) &&
+      (filter === "discarded" ||
+        filter === "trash" ||
+        s.review !== "discarded") &&
       (filter === "all" ||
         filter === "trash" ||
-        (filter === "attention"
-          ? !!s.error || !!s.task?.remoteId
-          : filter === "ready"
-            ? !!sceneBlob(s)
-            : !sceneBlob(s))),
+        (filter === "favorites"
+          ? s.review === "favorite"
+          : filter === "discarded"
+            ? s.review === "discarded"
+            : filter === "attention"
+              ? !!s.error || !!s.task?.remoteId
+              : filter === "ready"
+                ? !!sceneBlob(s)
+                : !sceneBlob(s))),
   );
   visible.sort((a, b) =>
     sort === "name"
@@ -83,6 +101,7 @@ export function ProjectWorkspace({
   ).length;
   const pending = (selected.length ? selected : scenes).filter(
     (s) =>
+      s.review !== "discarded" &&
       !sceneBlob(s) &&
       s.prompt.trim() &&
       !s.task?.remoteId &&
@@ -126,26 +145,20 @@ export function ProjectWorkspace({
       setSelection([]);
       setView("sequence");
     });
-  const zip = async () => {
-    setPacking(true);
-    try {
-      downloadBlob(
-        await archiveClips(selectedReady),
-        `${project.name}-clips.zip`,
-      );
-      w.notify(
-        `${selectedReady.length} vídeos preparados en ZIP, con sus prompts en clips.json.`,
-      );
-    } catch (e) {
-      w.notify(
-        e instanceof Error
-          ? e.message
-          : "No se pudo preparar el ZIP. Descarga menos clips a la vez.",
-        true,
-      );
-    } finally {
-      setPacking(false);
-    }
+  const review = (scene: Scene, next: Scene["review"]) =>
+    void w.action(async () => {
+      await w.patch(scene.id, { review: next });
+      if (next === "discarded")
+        setSelection((ids) => ids.filter((id) => id !== scene.id));
+    });
+  const reuse = (scene: Scene) => {
+    const trigger = document.activeElement as HTMLElement | null;
+    void w.action(async () => {
+      const copy = await db.duplicateScene(scene.id);
+      setFilter("all");
+      setSearch("");
+      openClip(copy.id, trigger);
+    });
   };
   if (view === "sequence")
     return (
@@ -188,6 +201,15 @@ export function ProjectWorkspace({
           </span>
         </div>
         <div className="inline">
+          <button
+            className="button compact"
+            disabled={
+              !scenes.some((s) => sceneBlob(s) && s.review !== "discarded")
+            }
+            onClick={() => setDownloading(true)}
+          >
+            <Download size={15} /> Descargar clips
+          </button>
           <button
             className="button compact"
             onClick={() => setView("sequence")}
@@ -261,10 +283,13 @@ export function ProjectWorkspace({
               value={filter}
               onChange={(e) => {
                 setFilter(e.target.value);
-                if (e.target.value === "trash") setSelection([]);
+                if (["trash", "discarded"].includes(e.target.value))
+                  setSelection([]);
               }}
             >
               <option value="all">Todos los clips</option>
+              <option value="favorites">Favoritos</option>
+              <option value="discarded">Descartados</option>
               <option value="ready">Con vídeo</option>
               <option value="drafts">Sin vídeo</option>
               <option value="attention">Por revisar</option>
@@ -332,24 +357,25 @@ export function ProjectWorkspace({
               <div className="selection-actions">
                 <button
                   className="button compact"
-                  disabled={!selected.length || packing}
+                  disabled={selectedReady.length !== 2 || selected.length !== 2}
+                  onClick={() => setCompareIds(selectedReady.map((s) => s.id))}
+                >
+                  <Columns2 size={14} /> Comparar 2 clips
+                </button>
+                <button
+                  className="button compact"
+                  disabled={!selected.length}
                   onClick={addToSequence}
                 >
                   <Layers size={14} /> Añadir a secuencia
                 </button>
                 <button
                   className="button compact"
-                  disabled={!selectedReady.length || packing}
-                  onClick={() => void zip()}
+                  disabled={!selectedReady.length}
+                  onClick={() => setDownloading(true)}
                 >
-                  {packing ? (
-                    <LoaderCircle size={14} className="spin" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                  {packing
-                    ? "Preparando ZIP…"
-                    : `Descargar seleccionados${selectedReady.length ? ` (${selectedReady.length})` : ""} · ZIP`}
+                  <Download size={14} />
+                  {`Descargar seleccionados${selectedReady.length ? ` (${selectedReady.length})` : ""} · ZIP`}
                 </button>
               </div>
             )}
@@ -429,6 +455,30 @@ export function ProjectWorkspace({
                           }
                         />
                       </label>
+                    )}
+                    {!scene.deleted_at && (
+                      <button
+                        className={`clip-favorite icon-button ${scene.review === "favorite" ? "is-favorite" : ""}`}
+                        aria-label={`${scene.review === "favorite" ? "Quitar favorito" : "Marcar favorito"}: ${scene.title || "Clip"}`}
+                        aria-pressed={scene.review === "favorite"}
+                        onClick={() =>
+                          review(
+                            scene,
+                            scene.review === "favorite"
+                              ? undefined
+                              : "favorite",
+                          )
+                        }
+                      >
+                        <Star
+                          size={18}
+                          fill={
+                            scene.review === "favorite"
+                              ? "currentColor"
+                              : "none"
+                          }
+                        />
+                      </button>
                     )}
                     {blob && (
                       <span className="clip-version">
@@ -537,6 +587,20 @@ export function ProjectWorkspace({
                           Reintentar clip
                         </button>
                       )}
+                    {scene.origin &&
+                      blob &&
+                      scenes.some(
+                        (s) => s.id === scene.origin!.sceneId && sceneBlob(s),
+                      ) && (
+                        <button
+                          className="text-button compare-origin"
+                          onClick={() =>
+                            setCompareIds([scene.origin!.sceneId, scene.id])
+                          }
+                        >
+                          <Columns2 size={14} /> Comparar con origen
+                        </button>
+                      )}
                     <p className="clip-prompt">
                       {version?.prompt ||
                         scene.prompt ||
@@ -561,17 +625,25 @@ export function ProjectWorkspace({
                       ) : (
                         <div className="inline">
                           <IconButton
-                            label={`Duplicar clip: ${scene.title || "Sin título"}`}
+                            label={`${scene.review === "discarded" ? "Recuperar descartado" : "Descartar clip"}: ${scene.title || "Clip"}`}
                             disabled={
                               w.job?.sceneId === scene.id ||
                               w.queue.some((q) => q.sceneId === scene.id)
                             }
                             onClick={() =>
-                              void w.action(async () => {
-                                const copy = await db.duplicateScene(scene.id);
-                                openClip(copy.id);
-                              })
+                              review(
+                                scene,
+                                scene.review === "discarded"
+                                  ? undefined
+                                  : "discarded",
+                              )
                             }
+                          >
+                            <CircleSlash size={15} />
+                          </IconButton>
+                          <IconButton
+                            label={`Crear otro parecido: ${scene.title || "Sin título"}`}
+                            onClick={() => reuse(scene)}
                           >
                             <Copy size={15} />
                           </IconButton>
@@ -625,9 +697,13 @@ export function ProjectWorkspace({
             title={
               filter === "trash"
                 ? "La papelera está vacía"
-                : scenes.length
-                  ? "No hay coincidencias"
-                  : "Este proyecto aún no tiene clips"
+                : filter === "favorites"
+                  ? "Aún no hay favoritos"
+                  : filter === "discarded"
+                    ? "No hay clips descartados"
+                    : scenes.length
+                      ? "No hay coincidencias"
+                      : "Este proyecto aún no tiene clips"
             }
             action={
               !scenes.length && filter !== "trash" ? (
@@ -655,12 +731,34 @@ export function ProjectWorkspace({
           >
             {filter === "trash"
               ? "Aquí aparecerán los clips que elimines del proyecto."
-              : scenes.length
-                ? "Cambia la búsqueda o el filtro para ver otros clips."
-                : "Añade un clip y describe el vídeo que quieres generar."}
+              : filter === "favorites"
+                ? "Marca la estrella de las tomas que quieras conservar a mano."
+                : filter === "discarded"
+                  ? "Los clips que descartes se ocultarán de la biblioteca. Puedes recuperarlos aquí sin perder sus vídeos."
+                  : scenes.length
+                    ? "Cambia la búsqueda o el filtro para ver otros clips."
+                    : "Añade un clip y describe el vídeo que quieres generar."}
           </Empty>
         )}
       </div>
+      {downloading && (
+        <DownloadDialog
+          scenes={scenes}
+          selectedIds={selection}
+          projectName={project.name}
+          onClose={() => setDownloading(false)}
+        />
+      )}
+      {comparing.length === 2 && (
+        <CompareDialog
+          clips={comparing as [Scene, Scene]}
+          onClose={() => setCompareIds([])}
+          markFavorite={(id, favorite) => {
+            const scene = scenes.find((s) => s.id === id);
+            if (scene) review(scene, favorite ? "favorite" : undefined);
+          }}
+        />
+      )}
       {view === "edit" && scenes.some((s) => s.id === editing) && (
         <ClipDialog
           key={editing}
