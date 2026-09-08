@@ -181,3 +181,50 @@ describe("optional sequences", () => {
     expect(saved.sequence_ids).toEqual([clips[0].id]);
   });
 });
+
+describe("recoverable clip deletion", () => {
+  it("keeps original media and restores the previous sequence position after reload", async () => {
+    const project = await db.createProject(
+      "Trash",
+      [1, 2].map((n) => ({ title: `Clip ${n}`, prompt: "prompt" })),
+      DEFAULT_VIDEO,
+    );
+    const clips = (await db.readWorkspace()).scenes.filter(
+      (s) => s.project_id === project.id,
+    );
+    await db.patchScene(clips[0].id, {
+      video_blob: new Blob(["original"]),
+      edit_prompt: "saved edit",
+      extend_prompt: "saved extension",
+    });
+    await db.saveSequence(
+      project.id,
+      clips.map((s) => s.id),
+    );
+    await db.deleteScene(clips[0].id);
+    let workspace = await db.readWorkspace();
+    expect(workspace.scenes.some((s) => s.id === clips[0].id)).toBe(false);
+    expect(
+      await sceneBlob(
+        workspace.trash.find((s) => s.id === clips[0].id)!,
+      )!.text(),
+    ).toBe("original");
+    await expect(db.saveSequence(project.id, [clips[0].id])).rejects.toThrow(
+      "cambiaron",
+    );
+    await db.restoreScene(clips[0].id);
+    workspace = await db.readWorkspace();
+    expect(
+      workspace.projects.find((p) => p.id === project.id)?.sequence_ids,
+    ).toEqual(clips.map((s) => s.id));
+    expect(
+      workspace.scenes.find((s) => s.id === clips[0].id)?.edit_prompt,
+    ).toBe("saved edit");
+    expect(workspace.trash.some((s) => s.id === clips[0].id)).toBe(false);
+    await db.restoreScene(clips[0].id);
+    expect(
+      (await db.readWorkspace()).projects.find((p) => p.id === project.id)
+        ?.sequence_ids,
+    ).toHaveLength(2);
+  });
+});

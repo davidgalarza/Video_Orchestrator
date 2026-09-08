@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   X,
+  RotateCcw,
 } from "lucide-react";
 import {
   activeVersion,
@@ -19,6 +20,7 @@ import {
   sceneSettings,
   sequenceScenes,
   type Project,
+  type Scene,
 } from "../types";
 import type { WorkspaceController } from "../lib/useWorkspace";
 import * as db from "../lib/storage";
@@ -32,40 +34,81 @@ export function ProjectWorkspace({
   project,
   workspace: w,
   settings,
+  initialClipId,
 }: {
   project: Project;
   workspace: WorkspaceController;
-  settings: () => void;
+  settings: (clipId?: string) => void;
+  initialClipId?: string;
 }) {
-  const [view, setView] = useState<"clips" | "edit" | "sequence">("clips");
-  const [editing, setEditing] = useState("");
+  const [view, setView] = useState<"clips" | "edit" | "sequence">(
+    initialClipId ? "edit" : "clips",
+  );
+  const [editing, setEditing] = useState(initialClipId || "");
   const [selection, setSelection] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [packing, setPacking] = useState(false);
+  const [sort, setSort] = useState("order");
+  const [deleted, setDeleted] = useState<string>();
+  const [creating, setCreating] = useState(false);
+  const focusReturn = useRef<HTMLElement | null>(null);
   const scenes = w.scenes.filter((s) => s.project_id === project.id);
   const sequence = sequenceScenes(project, scenes);
   const selected = scenes.filter((s) => selection.includes(s.id));
   const selectedReady = selected.filter((s) => sceneBlob(s));
-  const visible = scenes.filter(
+  const trash = w.trash.filter((s) => s.project_id === project.id);
+  const visible = (filter === "trash" ? trash : scenes).filter(
     (s) =>
       `${s.title || ""} ${s.prompt}`
         .toLocaleLowerCase()
         .includes(search.toLocaleLowerCase()) &&
       (filter === "all" ||
-        (filter === "ready" ? !!sceneBlob(s) : !sceneBlob(s))),
+        filter === "trash" ||
+        (filter === "attention"
+          ? !!s.error || !!s.task?.remoteId
+          : filter === "ready"
+            ? !!sceneBlob(s)
+            : !sceneBlob(s))),
   );
-  const pending = scenes.filter(
+  visible.sort((a, b) =>
+    sort === "name"
+      ? (a.title || "").localeCompare(b.title || "", "es")
+      : sort === "recent"
+        ? b.updated_at.localeCompare(a.updated_at)
+        : a.order - b.order,
+  );
+  const hiddenSelected = selected.filter(
+    (s) => !visible.some((v) => v.id === s.id),
+  ).length;
+  const pending = (selected.length ? selected : scenes).filter(
     (s) => !sceneBlob(s) && s.prompt.trim() && !s.task?.remoteId,
   );
-  const openClip = (id: string) => {
+  const openClip = (
+    id: string,
+    trigger = document.activeElement as HTMLElement | null,
+  ) => {
+    focusReturn.current = trigger;
     setEditing(id);
     setView("edit");
   };
-  const add = () =>
-    void w.action(async () => {
+  const add = async () => {
+    if (creating) return;
+    const trigger = document.activeElement as HTMLElement | null;
+    setCreating(true);
+    await w.action(async () => {
       const scene = await db.addScene(project.id, getDefaults());
-      openClip(scene.id);
+      setFilter("all");
+      setSearch("");
+      openClip(scene.id, trigger);
+    });
+    setCreating(false);
+  };
+  const removeClip = (id: string) =>
+    void w.action(async () => {
+      await db.deleteScene(id);
+      setDeleted(id);
+      setSelection((items) => items.filter((item) => item !== id));
     });
   const addToSequence = () =>
     void w.action(async () => {
@@ -112,7 +155,7 @@ export function ProjectWorkspace({
           key={`${view}-${editing}`}
           project={project}
           workspace={w}
-          settings={settings}
+          settings={() => settings()}
           initialSceneId={editing}
           sequenceMode={view === "sequence"}
           browseClips={() => setView("clips")}
@@ -149,7 +192,11 @@ export function ProjectWorkspace({
               ? `Secuencia · ${sequence.length}`
               : "Montar secuencia"}
           </button>
-          <button className="button primary compact" onClick={add}>
+          <button
+            className="button primary compact"
+            disabled={creating}
+            onClick={() => void add()}
+          >
             <Plus size={15} /> Nuevo clip
           </button>
         </div>
@@ -170,12 +217,29 @@ export function ProjectWorkspace({
             disabled={!pending.length || !!w.job}
             onClick={() => void w.run(pending.map((s) => s.id))}
           >
-            <Play size={14} /> Generar pendientes{" "}
+            <Play size={14} />{" "}
+            {selected.length ? "Generar seleccionados" : "Generar pendientes"}{" "}
             {pending.length > 0 && (
               <span className="count">{pending.length}</span>
             )}
           </button>
         </header>
+        {deleted && trash.some((s) => s.id === deleted) && (
+          <div className="undo-notice" role="status">
+            <span>Clip movido a la papelera.</span>
+            <button
+              className="text-button"
+              onClick={() =>
+                void w.action(async () => {
+                  await db.restoreScene(deleted);
+                  setDeleted(undefined);
+                })
+              }
+            >
+              <RotateCcw size={14} /> Deshacer
+            </button>
+          </div>
+        )}
         <div className="clips-filters">
           <label className="search">
             <Search size={16} />
@@ -191,67 +255,114 @@ export function ProjectWorkspace({
             <select
               aria-label="Filtrar clips"
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={(e) => {
+                setFilter(e.target.value);
+                if (e.target.value === "trash") setSelection([]);
+              }}
             >
               <option value="all">Todos los clips</option>
               <option value="ready">Con vídeo</option>
               <option value="drafts">Sin vídeo</option>
+              <option value="attention">Por revisar</option>
+              <option value="trash">Papelera ({trash.length})</option>
             </select>
           </label>
         </div>
-        <div className="clip-selection-bar" aria-label="Acciones de selección">
-          <label className="clip-check">
-            <input
-              type="checkbox"
-              aria-label="Seleccionar clips visibles"
-              checked={
-                visible.length > 0 &&
-                visible.every((s) => selection.includes(s.id))
-              }
-              disabled={!visible.length}
-              onChange={(e) =>
-                setSelection(
-                  e.target.checked
-                    ? [...new Set([...selection, ...visible.map((s) => s.id)])]
-                    : selection.filter(
-                        (id) => !visible.some((s) => s.id === id),
-                      ),
-                )
-              }
-            />
-            {selected.length
-              ? `${selected.length} seleccionados`
-              : "Seleccionar"}
-          </label>
-          {selected.length > 0 && (
-            <button className="text-button" onClick={() => setSelection([])}>
-              Deseleccionar
-            </button>
-          )}
-          <div className="selection-actions">
-            <button
-              className="button compact"
-              disabled={!selected.length || packing}
-              onClick={addToSequence}
-            >
-              <Layers size={14} /> Añadir a secuencia
-            </button>
-            <button
-              className="button compact"
-              disabled={!selectedReady.length || packing}
-              onClick={() => void zip()}
-            >
-              {packing ? (
-                <LoaderCircle size={14} className="spin" />
-              ) : (
-                <Download size={14} />
-              )}
-              {packing
-                ? "Preparando ZIP…"
-                : `Descargar seleccionados${selectedReady.length ? ` (${selectedReady.length})` : ""} · ZIP`}
-            </button>
+        <label className="clip-sort">
+          Ordenar
+          <select
+            aria-label="Ordenar clips"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="order">Orden de creación</option>
+            <option value="recent">Modificados recientemente</option>
+            <option value="name">Nombre A–Z</option>
+          </select>
+        </label>
+        {filter !== "trash" && (
+          <div
+            className={`clip-selection-bar ${selected.length ? "has-selection" : ""}`}
+            aria-label="Acciones de selección"
+          >
+            <label className="clip-check">
+              <input
+                type="checkbox"
+                aria-label="Seleccionar clips visibles"
+                ref={(element) => {
+                  if (element)
+                    element.indeterminate =
+                      visible.some((s) => selection.includes(s.id)) &&
+                      !visible.every((s) => selection.includes(s.id));
+                }}
+                checked={
+                  visible.length > 0 &&
+                  visible.every((s) => selection.includes(s.id))
+                }
+                disabled={!visible.length}
+                onChange={(e) =>
+                  setSelection(
+                    e.target.checked
+                      ? [
+                          ...new Set([
+                            ...selection,
+                            ...visible.map((s) => s.id),
+                          ]),
+                        ]
+                      : selection.filter(
+                          (id) => !visible.some((s) => s.id === id),
+                        ),
+                  )
+                }
+              />
+              {selected.length
+                ? `${selected.length} seleccionados`
+                : "Seleccionar"}
+            </label>
+            {selected.length > 0 && (
+              <button className="text-button" onClick={() => setSelection([])}>
+                Deseleccionar
+              </button>
+            )}
+            {selected.length > 0 && (
+              <div className="selection-actions">
+                <button
+                  className="button compact"
+                  disabled={!selected.length || packing}
+                  onClick={addToSequence}
+                >
+                  <Layers size={14} /> Añadir a secuencia
+                </button>
+                <button
+                  className="button compact"
+                  disabled={!selectedReady.length || packing}
+                  onClick={() => void zip()}
+                >
+                  {packing ? (
+                    <LoaderCircle size={14} className="spin" />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                  {packing
+                    ? "Preparando ZIP…"
+                    : `Descargar seleccionados${selectedReady.length ? ` (${selectedReady.length})` : ""} · ZIP`}
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+        {hiddenSelected > 0 && (
+          <p className="selection-note">
+            {hiddenSelected} seleccionados fuera de este filtro. Las acciones
+            también los incluyen.
+          </p>
+        )}
+        {filter === "trash" && (
+          <p className="selection-note">
+            Los clips conservan sus vídeos y versiones. Restáuralos para volver
+            a usarlos.
+          </p>
+        )}
         {selected.length > selectedReady.length && (
           <p className="selection-note">
             El ZIP incluirá solo los {selectedReady.length} clips seleccionados
@@ -285,6 +396,7 @@ export function ProjectWorkspace({
                     <button
                       className="clip-open"
                       aria-label={`Abrir clip: ${scene.title || "Sin título"}`}
+                      disabled={!!scene.deleted_at}
                       onClick={() => openClip(scene.id)}
                     >
                       <Clip
@@ -298,20 +410,22 @@ export function ProjectWorkspace({
                       />
                       <span className="clip-open-label">Abrir editor</span>
                     </button>
-                    <label className="clip-checkbox">
-                      <input
-                        type="checkbox"
-                        aria-label={`Seleccionar clip: ${scene.title || "Sin título"}`}
-                        checked={selection.includes(scene.id)}
-                        onChange={(e) =>
-                          setSelection(
-                            e.target.checked
-                              ? [...selection, scene.id]
-                              : selection.filter((id) => id !== scene.id),
-                          )
-                        }
-                      />
-                    </label>
+                    {!scene.deleted_at && (
+                      <label className="clip-checkbox">
+                        <input
+                          type="checkbox"
+                          aria-label={`Seleccionar clip: ${scene.title || "Sin título"}`}
+                          checked={selection.includes(scene.id)}
+                          onChange={(e) =>
+                            setSelection(
+                              e.target.checked
+                                ? [...selection, scene.id]
+                                : selection.filter((id) => id !== scene.id),
+                            )
+                          }
+                        />
+                      </label>
+                    )}
                     {blob && (
                       <span className="clip-version">
                         V{versionNumber} ·{" "}
@@ -321,7 +435,10 @@ export function ProjectWorkspace({
                   </div>
                   <div className="clip-info">
                     <div className="clip-title">
-                      <button onClick={() => openClip(scene.id)}>
+                      <button
+                        disabled={!!scene.deleted_at}
+                        onClick={() => openClip(scene.id)}
+                      >
                         {scene.title || "Clip sin título"}
                       </button>
                       <span
@@ -335,11 +452,13 @@ export function ProjectWorkspace({
                       >
                         {w.job?.sceneId === scene.id
                           ? "Generando…"
-                          : scene.error
-                            ? "Revisar"
-                            : blob
-                              ? "Listo"
-                              : "Borrador"}
+                          : scene.task?.remoteId
+                            ? "Por recuperar"
+                            : scene.error
+                              ? "Revisar"
+                              : blob
+                                ? "Listo"
+                                : "Borrador"}
                       </span>
                     </div>
                     <p className="clip-prompt">
@@ -349,47 +468,66 @@ export function ProjectWorkspace({
                     </p>
                     <div className="clip-details">
                       <span>
-                        {references.length} referencias ·{" "}
-                        {scene.versions?.length || (blob ? 1 : 0)} versiones
+                        {references.length}{" "}
+                        {references.length === 1 ? "referencia" : "referencias"}{" "}
+                        · {scene.versions?.length || (blob ? 1 : 0)}{" "}
+                        {(scene.versions?.length || (blob ? 1 : 0)) === 1
+                          ? "versión"
+                          : "versiones"}
                       </span>
-                      <div className="inline">
-                        <IconButton
-                          label={`Duplicar clip: ${scene.title || "Sin título"}`}
-                          disabled={!!w.job}
+                      {scene.deleted_at ? (
+                        <button
+                          className="text-button"
                           onClick={() =>
-                            void w.action(async () => {
-                              const copy = await db.duplicateScene(scene.id);
-                              openClip(copy.id);
-                            })
+                            void w.action(() => db.restoreScene(scene.id))
                           }
                         >
-                          <Copy size={15} />
-                        </IconButton>
-                        <IconButton
-                          label={`Eliminar clip: ${scene.title || "Sin título"}`}
-                          disabled={!!w.job}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                "¿Eliminar este clip y sus versiones guardadas?",
-                              )
-                            )
-                              void w.action(() => db.deleteScene(scene.id));
-                          }}
-                        >
-                          <Trash2 size={15} />
-                        </IconButton>
-                        <IconButton
-                          label={`Descargar clip: ${scene.title || "Sin título"}`}
-                          disabled={!blob}
-                          onClick={() =>
-                            downloadBlob(blob!, clipFilename(scene))
-                          }
-                        >
-                          <Download size={16} />
-                        </IconButton>
-                      </div>
+                          <RotateCcw size={15} /> Restaurar
+                        </button>
+                      ) : (
+                        <div className="inline">
+                          <IconButton
+                            label={`Duplicar clip: ${scene.title || "Sin título"}`}
+                            disabled={!!w.job}
+                            onClick={() =>
+                              void w.action(async () => {
+                                const copy = await db.duplicateScene(scene.id);
+                                openClip(copy.id);
+                              })
+                            }
+                          >
+                            <Copy size={15} />
+                          </IconButton>
+                          <IconButton
+                            label={`Eliminar clip: ${scene.title || "Sin título"}`}
+                            disabled={!!w.job}
+                            onClick={() => removeClip(scene.id)}
+                          >
+                            <Trash2 size={15} />
+                          </IconButton>
+                          <IconButton
+                            label={`Descargar clip: ${scene.title || "Sin título"}`}
+                            disabled={!blob}
+                            onClick={() =>
+                              downloadBlob(blob!, clipFilename(scene))
+                            }
+                          >
+                            <Download size={16} />
+                          </IconButton>
+                        </div>
+                      )}
                     </div>
+                    {!scene.deleted_at && scene.task?.remoteId && (
+                      <button
+                        className="text-button recover-clip"
+                        disabled={!!w.job}
+                        onClick={() =>
+                          void w.run([scene.id], "generate", undefined, true)
+                        }
+                      >
+                        <RotateCcw size={14} /> Recuperar resultado
+                      </button>
+                    )}
                     {sequence.some((s) => s.id === scene.id) && (
                       <span className="clip-in-sequence">
                         <Film size={12} /> En la secuencia
@@ -403,31 +541,57 @@ export function ProjectWorkspace({
         ) : (
           <Empty
             title={
-              scenes.length
-                ? "No hay coincidencias"
-                : "Este proyecto aún no tiene clips"
+              filter === "trash"
+                ? "La papelera está vacía"
+                : scenes.length
+                  ? "No hay coincidencias"
+                  : "Este proyecto aún no tiene clips"
             }
             action={
-              !scenes.length ? (
-                <button className="button" onClick={add}>
+              !scenes.length && filter !== "trash" ? (
+                <button
+                  className="button"
+                  disabled={creating}
+                  onClick={() => void add()}
+                >
                   <Plus size={16} /> Nuevo clip
+                </button>
+              ) : scenes.length &&
+                (search || filter !== "all") &&
+                filter !== "trash" ? (
+                <button
+                  className="button"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("all");
+                  }}
+                >
+                  Limpiar filtros
                 </button>
               ) : undefined
             }
           >
-            {scenes.length
-              ? "Cambia la búsqueda o el filtro para ver otros clips."
-              : "Añade un clip y describe el vídeo que quieres generar."}
+            {filter === "trash"
+              ? "Aquí aparecerán los clips que elimines del proyecto."
+              : scenes.length
+                ? "Cambia la búsqueda o el filtro para ver otros clips."
+                : "Añade un clip y describe el vídeo que quieres generar."}
           </Empty>
         )}
       </div>
       {view === "edit" && scenes.some((s) => s.id === editing) && (
-        <ClipDialog onClose={() => setView("clips")} workspace={w}>
+        <ClipDialog
+          key={editing}
+          scene={scenes.find((s) => s.id === editing)!}
+          returnFocus={focusReturn}
+          onClose={() => setView("clips")}
+          workspace={w}
+        >
           <Editor
             key={editing}
             project={project}
             workspace={w}
-            settings={settings}
+            settings={() => settings(editing)}
             initialSceneId={editing}
             clipOnly
             browseClips={() => setView("clips")}
@@ -440,18 +604,32 @@ export function ProjectWorkspace({
 
 function ClipDialog({
   children,
+  scene,
   onClose,
+  returnFocus,
   workspace: w,
 }: {
   children: React.ReactNode;
+  scene: Scene;
+  returnFocus: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   workspace: WorkspaceController;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const [panel, setPanel] = useState<"configure" | "preview">(
+    sceneBlob(scene) ? "preview" : "configure",
+  );
+  const count = scene.versions?.length || 0;
+  const [previousCount, setPreviousCount] = useState(count);
+  if (count > previousCount) {
+    setPreviousCount(count);
+    setPanel("preview");
+  }
   useEffect(() => {
     const element = dialog.current!;
     const previousOverflow = document.body.style.overflow;
-    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousFocus =
+      returnFocus.current || (document.activeElement as HTMLElement | null);
     element.showModal();
     document.body.style.overflow = "hidden";
     return () => {
@@ -459,11 +637,11 @@ function ClipDialog({
       document.body.style.overflow = previousOverflow;
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, []);
+  }, [returnFocus]);
   return (
     <dialog
       ref={dialog}
-      className="clip-dialog"
+      className={`clip-dialog panel-${panel}`}
       aria-labelledby="clip-dialog-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -479,7 +657,34 @@ function ClipDialog({
           <X size={20} />
         </IconButton>
       </header>
-      {w.notice?.error && (
+      <div className="clip-panel-switch" aria-label="Vista del clip">
+        <button
+          aria-pressed={panel === "configure"}
+          onClick={() => setPanel("configure")}
+        >
+          Configurar
+        </button>
+        <button
+          aria-pressed={panel === "preview"}
+          onClick={() => setPanel("preview")}
+        >
+          Vista previa{sceneBlob(scene) ? " · Lista" : ""}
+        </button>
+      </div>
+      {w.recovery && (
+        <div className="clip-dialog-notice" role="alert">
+          El vídeo está listo, pero no se pudo guardar.{" "}
+          <button
+            className="button"
+            onClick={() =>
+              downloadBlob(w.recovery!.blob, "video-recuperado.mp4")
+            }
+          >
+            Descargar ahora
+          </button>
+        </div>
+      )}
+      {w.notice?.error && w.notice.text !== scene.error && (
         <div className="clip-dialog-notice" role="alert">
           {w.notice.text}
         </div>

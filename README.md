@@ -7,6 +7,7 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 - Generar vídeos con **Gemini Omni 1.1 Flash** usando tu propia API key de Google AI Studio. También se mantiene Veo 3.1.
 - Organizar cada proyecto como una biblioteca de clips, con búsqueda, filtros, prompts, referencias y versiones.
 - Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
+- Recuperar clips eliminados desde la papelera o con **Deshacer**, conservando sus versiones y su posición en la secuencia.
 - Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
 - Elegir formato vertical/horizontal, duración y resolución por escena.
 - Crear versiones, recuperar una toma anterior, editarla mediante un prompt y extenderla con Omni hasta 40 segundos.
@@ -21,6 +22,8 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 El proyecto abre en **Clips del proyecto**. Usa **Nuevo clip** o abre uno existente para generar, revisar versiones y descargarlo en un modal individual. Al cerrarlo, vuelves a la biblioteca y los cambios quedan guardados. Para seguir en un editor local, selecciona clips y pulsa **Descargar seleccionados · ZIP**: se incluye la versión activa de cada vídeo, sin recomprimir. Los borradores se excluyen y los nombres llevan un índice para evitar colisiones. El ZIP admite hasta 4 GB; para más material, descarga por grupos.
 
 Para un montaje rápido, selecciona clips y pulsa **Añadir a secuencia**. Ordena las tomas con las flechas, usa **Quitar de secuencia** para excluirlas y **Exportar vídeo** para unirlas. **Todos los clips** vuelve a la biblioteca. El orden del montaje se guarda aparte; los proyectos antiguos conservan su secuencia original.
+
+En el modal, escribe el prompt y ajusta la salida; las referencias son opcionales y se despliegan cuando las necesitas. Las instrucciones de edición y extensión también se guardan. Puedes preparar otro clip mientras se genera uno y volver desde Ajustes al clip abierto. En móvil, alterna entre **Configurar** y **Vista previa**. En la biblioteca puedes ordenar, filtrar los clips **Por revisar** y recuperar resultados pendientes directamente.
 
 ## Inicio local
 
@@ -48,6 +51,7 @@ Vercel sirve archivos estáticos. Las generaciones y su seguimiento se realizan 
 ## Datos, recuperación y límites
 
 - Los proyectos, imágenes y vídeos se guardan en IndexedDB. No se sincronizan entre dispositivos. Descarga los vídeos importantes antes de borrar los datos del navegador.
+- La papelera conserva los archivos para poder restaurarlos; mover un clip a ella no libera espacio. Eliminar el proyecto elimina también sus clips de la papelera.
 - Se conserva el nombre y esquema de la base de datos del proyecto original. Sus vídeos se leen desde el blob almacenado, creando URLs nuevas al reproducirlos.
 - Cada iteración conserva las versiones anteriores. Pausar detiene el seguimiento local; Google puede continuar procesando y facturando la solicitud.
 - Omni se lee desde `steps → model_output → content` en REST; `output_video` es una comodidad del SDK. Se admiten vídeos en base64 y por URI, esperando a que el archivo esté `ACTIVE` antes de descargarlo.

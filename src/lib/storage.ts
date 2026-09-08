@@ -1,6 +1,7 @@
 import { openDB, type DBSchema } from "idb";
 import {
   sceneSettings,
+  sequenceScenes,
   type Project,
   type Scene,
   type Asset,
@@ -52,7 +53,12 @@ export async function readWorkspace() {
         a.updated_at || a.created_at,
       ),
     ),
-    scenes: scenes.sort((a, b) => a.order - b.order),
+    scenes: scenes
+      .filter((s) => !s.deleted_at)
+      .sort((a, b) => a.order - b.order),
+    trash: scenes
+      .filter((s) => s.deleted_at)
+      .sort((a, b) => b.deleted_at!.localeCompare(a.deleted_at!)),
     assets: assets.sort((a, b) => b.created_at.localeCompare(a.created_at)),
     usage,
   };
@@ -114,7 +120,7 @@ export async function patchScene(id: string, patch: Partial<Scene>) {
   const db = await connection;
   const tx = db.transaction(["scenes", "projects"], "readwrite");
   const scene = await tx.objectStore("scenes").get(id);
-  if (!scene)
+  if (!scene || scene.deleted_at)
     throw new Error("No se encuentra esta escena. Vuelve a abrir el proyecto.");
   const updated = { ...scene, ...patch, id: scene.id, updated_at: now() };
   await tx.objectStore("scenes").put(updated);
@@ -168,17 +174,61 @@ export async function deleteScene(id: string) {
   const db = await connection;
   const tx = db.transaction(["scenes", "projects"], "readwrite");
   const scene = await tx.objectStore("scenes").get(id);
-  if (scene) {
+  if (scene && !scene.deleted_at) {
     const project = await tx.objectStore("projects").get(scene.project_id);
-    if (project?.sequence_ids)
+    const all = await tx
+      .objectStore("scenes")
+      .index("by-project")
+      .getAll(scene.project_id);
+    const sequence = project
+      ? sequenceScenes(
+          project,
+          all.filter((s) => !s.deleted_at),
+        ).map((s) => s.id)
+      : [];
+    await tx
+      .objectStore("scenes")
+      .put({
+        ...scene,
+        deleted_at: now(),
+        deleted_sequence_index: sequence.indexOf(id),
+      });
+    if (project)
       await tx
         .objectStore("projects")
         .put({
           ...project,
-          sequence_ids: project.sequence_ids.filter((item) => item !== id),
+          sequence_ids: sequence.filter((item) => item !== id),
           updated_at: now(),
         });
-    await tx.objectStore("scenes").delete(id);
+  }
+  await tx.done;
+}
+export async function restoreScene(id: string) {
+  const db = await connection;
+  const tx = db.transaction(["scenes", "projects"], "readwrite");
+  const scene = await tx.objectStore("scenes").get(id);
+  if (scene?.deleted_at) {
+    const project = await tx.objectStore("projects").get(scene.project_id);
+    if (!project) throw new Error("El proyecto ya no existe.");
+    const sequence = [...(project.sequence_ids || [])];
+    if ((scene.deleted_sequence_index ?? -1) >= 0 && !sequence.includes(id))
+      sequence.splice(
+        Math.min(scene.deleted_sequence_index!, sequence.length),
+        0,
+        id,
+      );
+    await tx
+      .objectStore("scenes")
+      .put({
+        ...scene,
+        deleted_at: undefined,
+        deleted_sequence_index: undefined,
+        updated_at: now(),
+      });
+    await tx
+      .objectStore("projects")
+      .put({ ...project, sequence_ids: sequence, updated_at: now() });
   }
   await tx.done;
 }
@@ -193,7 +243,7 @@ export async function saveSequence(projectId: string, ids: string[]) {
   if (
     !project ||
     new Set(ids).size !== ids.length ||
-    ids.some((id) => !scenes.some((s) => s.id === id))
+    ids.some((id) => !scenes.some((s) => s.id === id && !s.deleted_at))
   )
     throw new Error(
       "Los clips del proyecto cambiaron. Vuelve a seleccionarlos.",

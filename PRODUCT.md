@@ -31,4 +31,4 @@ Primary workflow: project clip libraries, individual editing, reusable image ref
 
 ## Evidence on Hand
 
-Original source and Google's public API documentation. No user-provided reference media or API key has been supplied. Live generation remains to be validated with an authorized key.
+Original source, Google's public API documentation, browser workflow tests and real FFmpeg exports. Recovery of an existing Omni result was verified using the user's configured connection without submitting another generation. Automated generation tests use simulated responses and do not establish model availability or billing behavior.

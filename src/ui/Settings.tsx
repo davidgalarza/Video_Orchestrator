@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Check,
+  ArrowLeft,
   ExternalLink,
   Eye,
   EyeOff,
@@ -21,9 +22,11 @@ import type { WorkspaceController } from "../lib/useWorkspace";
 export function Settings({
   workspace: w,
   onKeyChange,
+  returnToClip,
 }: {
   workspace: WorkspaceController;
   onKeyChange: () => void;
+  returnToClip?: () => void;
 }) {
   const [key, setKey] = useState(getApiKey);
   const [visible, setVisible] = useState(false);
@@ -47,7 +50,11 @@ export function Settings({
   }
   return (
     <div className="page settings-page">
-      <span className="kicker">A tu manera</span>
+      {returnToClip && (
+        <button className="text-button settings-return" onClick={returnToClip}>
+          <ArrowLeft size={16} /> Volver al clip
+        </button>
+      )}
       <h1>Ajustes del estudio</h1>
       <p className="page-description">
         Conecta Google una vez. Después, céntrate en crear.

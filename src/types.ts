@@ -64,6 +64,10 @@ export interface Scene {
   order: number;
   title?: string;
   prompt: string;
+  edit_prompt?: string;
+  extend_prompt?: string;
+  deleted_at?: string;
+  deleted_sequence_index?: number;
   status: "pending" | "processing" | "completed" | "failed" | "paused";
   settings?: VideoSettings;
   first_frame_asset_id?: string;

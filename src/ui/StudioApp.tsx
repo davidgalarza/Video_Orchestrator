@@ -34,6 +34,10 @@ export function StudioApp() {
   const w = useWorkspace();
   const [route, setRoute] = useState(currentRoute);
   const [menu, setMenu] = useState(false);
+  const [settingsReturn, setSettingsReturn] = useState<{
+    projectId: string;
+    clipId?: string;
+  }>();
   const [connected, setConnected] = useState(() => !!getApiKey());
   useEffect(() => {
     const change = () => setRoute(currentRoute());
@@ -48,7 +52,10 @@ export function StudioApp() {
   const project = route.startsWith("project/")
     ? w.projects.find((p) => p.id === route.slice(8))
     : undefined;
-  const open = (id: string) => navigate(`project/${id}`);
+  const open = (id: string) => {
+    setSettingsReturn(undefined);
+    navigate(`project/${id}`);
+  };
   const create = () =>
     void w.action(async () => {
       const project = await db.createProject(
@@ -246,6 +253,11 @@ export function StudioApp() {
                 <Settings
                   workspace={w}
                   onKeyChange={() => setConnected(!!getApiKey())}
+                  returnToClip={
+                    settingsReturn
+                      ? () => navigate(`project/${settingsReturn.projectId}`)
+                      : undefined
+                  }
                 />
               )}
               <div hidden={route !== "assets"}>
@@ -259,7 +271,15 @@ export function StudioApp() {
                   key={project.id}
                   project={project}
                   workspace={w}
-                  settings={() => navigate("settings")}
+                  initialClipId={
+                    settingsReturn?.projectId === project.id
+                      ? settingsReturn.clipId
+                      : undefined
+                  }
+                  settings={(clipId) => {
+                    setSettingsReturn({ projectId: project.id, clipId });
+                    navigate("settings");
+                  }}
                 />
               )}
               {(route === "home" ||

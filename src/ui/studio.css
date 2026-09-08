@@ -2137,7 +2137,7 @@ button {
 }
 
 .clip-dialog {
-  width: min(1080px, calc(100vw - 48px));
+  width: min(1120px, calc(100vw - 48px));
   max-width: none;
   max-height: 92dvh;
   margin: auto;
@@ -2172,30 +2172,31 @@ button {
   font-size: 0.8rem;
 }
 .clip-dialog-header .icon-button {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
 }
 .clip-dialog-body {
-  overflow: auto;
   min-height: 0;
+  overflow: hidden;
 }
 .clip-dialog .editor {
-  height: auto;
-  min-height: 0;
-}
-.clip-dialog .editor-body {
   height: min(720px, calc(92dvh - 125px));
   min-height: 0;
 }
-.clip-dialog .preview-column {
+.clip-dialog .editor-body {
   min-height: 0;
 }
 .clip-dialog .inspector {
-  flex-basis: 390px;
+  flex-basis: 420px;
+  min-height: 0;
 }
 .clip-dialog .inspector-content {
   min-height: 0;
+}
+.clip-dialog .generate-footer {
+  position: static;
+  flex-shrink: 0;
 }
 .clip-dialog .stage {
   min-height: 200px;
@@ -2215,68 +2216,207 @@ button {
   font-size: 0.82rem;
   color: var(--warning);
   border-bottom: 1px solid var(--line);
+  max-height: 120px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.clip-panel-switch {
+  display: none;
+}
+.save-indicator {
+  float: right;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.prompt-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.72rem;
+  margin-top: -12px;
+}
+.prompt-info > span {
+  color: var(--muted);
+}
+.reference-details {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.reference-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.86rem;
+  list-style: none;
+  min-height: 44px;
+}
+.reference-details > summary::-webkit-details-marker {
+  display: none;
+}
+.reference-details > summary > span {
+  flex: 1;
+}
+.reference-details > summary small {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.reference-details[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.reference-details .reference-section {
+  margin-top: 18px;
+}
+.generate-footer .inline-error {
+  max-height: 100px;
+  overflow: auto;
+  margin-bottom: 12px;
+  font-size: 0.78rem;
+}
+.undo-notice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--raised);
+  font-size: 0.85rem;
+  border-radius: 8px;
+}
+.clip-sort {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 16px;
+}
+.clip-sort select {
+  width: auto;
+  max-width: 250px;
+}
+.clip-selection-bar.has-selection {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 18px;
+}
+.recover-clip {
+  margin-top: 12px;
+}
+.clip-details {
+  flex-wrap: wrap;
+}
+.clip-details > .inline {
+  margin-left: auto;
+  gap: 2px;
+}
+.project-clip:has(.clip-open:disabled) .clip-open {
+  opacity: 0.75;
+}
+.settings-return {
+  margin-bottom: 24px;
 }
 @media (max-width: 760px) {
   .clip-dialog {
     width: 100%;
-    max-height: 100dvh;
     height: 100dvh;
-    border-radius: 0;
+    max-height: 100dvh;
     border: 0;
+    border-radius: 0;
   }
   .clip-dialog-header {
-    padding: 14px 18px;
+    padding: 12px 18px;
   }
   .clip-dialog-header p {
-    max-width: 240px;
-    line-height: 1.5;
+    display: none;
   }
+  .clip-dialog-body {
+    flex: 1;
+  }
+  .clip-dialog .editor,
   .clip-dialog .editor-body {
-    height: auto;
+    height: 100%;
   }
   .clip-dialog .inspector {
-    order: -1;
-    flex-basis: auto;
-    border-top: 0;
+    flex: 1;
+    border: 0;
+    min-height: 0;
   }
   .clip-dialog .inspector-heading {
     display: none;
   }
   .clip-dialog .inspector-content {
-    overflow: visible;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .clip-dialog .generate-footer {
+    padding: 14px 20px;
   }
   .clip-dialog .preview-column {
-    border-top: 1px solid var(--line);
+    height: 100%;
+    overflow: auto;
+  }
+  .clip-dialog .stage {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    padding: 12px 20px;
+  }
+  .clip-dialog .preview-frame.portrait {
+    height: min(430px, 55dvh);
+    min-height: 0;
+    max-height: min(430px, 55dvh);
+  }
+  .clip-dialog.panel-configure .preview-column,
+  .clip-dialog.panel-preview .inspector {
+    display: none;
   }
   .clip-dialog-footnote {
     padding: 10px 18px;
+    font-size: 0.72rem;
   }
-}
-.clip-dialog .editor {
-  height: min(720px, calc(92dvh - 125px));
-}
-.clip-dialog .editor-body {
-  height: auto;
-}
-.clip-dialog .inspector {
-  min-height: 0;
-}
-.clip-dialog .generate-footer {
-  flex-shrink: 0;
-}
-@media (max-width: 760px) {
-  .clip-dialog .editor {
-    height: auto;
-    padding-bottom: 130px;
+  .clip-panel-switch {
+    display: flex;
+    gap: 8px;
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
   }
-  .clip-dialog .generate-footer {
-    position: fixed;
-    bottom: 36px;
-    left: 0;
-    right: 0;
-    z-index: 2;
+  .clip-panel-switch button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 0.86rem;
+    border-radius: 6px;
   }
-  .clip-dialog .inspector-content {
-    padding-bottom: 30px;
+  .clip-panel-switch button[aria-pressed="true"] {
+    background: var(--raised);
+    font-weight: 550;
+  }
+  .clip-sort {
+    justify-content: space-between;
+  }
+  .clip-sort select {
+    max-width: 210px;
+  }
+  .clip-details .icon-button,
+  .clip-check,
+  .clip-checkbox {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .clip-checkbox {
+    align-items: center;
+    justify-content: center;
+  }
+  .prompt-info > span {
+    display: none;
   }
 }

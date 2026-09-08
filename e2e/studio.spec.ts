@@ -97,6 +97,7 @@ test("editor workflow: key, blank project, references, versions, persistence and
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
+  await page.locator(".reference-details summary").click();
   await page
     .getByLabel("Subir fotograma inicial", { exact: true })
     .setInputFiles("e2e/fixtures/reference.png");
@@ -244,7 +245,10 @@ test("paused generations recover after reload without creating a second video", 
   await page
     .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
     .click();
-  await page.getByRole("button", { name: "Recuperar resultado" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Recuperar resultado" })
+    .click();
   await expect(page.locator(".preview-frame video")).toBeVisible();
   expect(posts).toBe(1);
 });
@@ -511,6 +515,9 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
 test("new clips open a focused modal, save drafts and return focus to the library", async ({
   page,
 }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
   await page.goto("/");
   await createProject(page);
   await page
@@ -565,4 +572,124 @@ test("new clips open a focused modal, save drafts and return focus to the librar
   await expect(
     page.getByRole("button", { name: "Cerrar editor de clip", exact: true }),
   ).toBeInViewport();
+});
+
+test("settings returns to the draft, optional references stay compact and trash is recoverable", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await createProject(page, 2);
+  await expect(page.locator(".reference-details")).not.toHaveAttribute(
+    "open",
+    "",
+  );
+  await page
+    .getByRole("button", { name: "Conectar Google para generar", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Ajustes del estudio" }),
+  ).toBeVisible();
+  await page.getByLabel("Google API key", { exact: true }).fill("test-key");
+  await page
+    .getByRole("button", { name: "Guardar clave", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Volver al clip", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByLabel("Nombre de la escena")).toHaveValue("Escena 2");
+  await expect(page.getByLabel("¿Qué ocurre en esta toma?")).toContainText(
+    "Plano 2",
+  );
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
+  await page
+    .getByLabel("Seleccionar clip: Primera escena", { exact: true })
+    .check();
+  await expect(
+    page.getByLabel("Seleccionar clips visibles", { exact: true }),
+  ).toHaveJSProperty("indeterminate", true);
+  await page.getByLabel("Buscar clips", { exact: true }).fill("Escena 2");
+  await expect(
+    page.locator(".selection-note").filter({ hasText: "fuera de este filtro" }),
+  ).toBeVisible();
+  await page.getByLabel("Buscar clips", { exact: true }).fill("");
+  await page
+    .getByRole("button", { name: "Eliminar clip: Primera escena", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(1);
+  await page.getByRole("button", { name: "Deshacer", exact: true }).click();
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Eliminar clip: Primera escena", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(1);
+  await page.reload();
+  await page.getByLabel("Filtrar clips").selectOption("trash");
+  await expect(page.locator(".project-clip")).toHaveCount(1);
+  await page.getByRole("button", { name: "Restaurar", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "La papelera está vacía" }),
+  ).toBeVisible();
+  await page.getByLabel("Filtrar clips").selectOption("all");
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+});
+
+test("edit instructions persist and mobile switches between configuration and the finished video", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, (route) =>
+    route.fulfill({
+      json: {
+        id: "saved-video",
+        status: "completed",
+        steps: [
+          { type: "model_output", content: [{ type: "video", data: clip }] },
+        ],
+      },
+    }),
+  );
+  await page.goto("/");
+  await createProject(page);
+  await page
+    .getByRole("button", { name: "Generar escena", exact: true })
+    .click();
+  await expect(page.locator(".preview-frame video")).toBeVisible();
+  await page.getByRole("button", { name: "Editar", exact: true }).click();
+  await page
+    .getByLabel("¿Qué quieres cambiar?")
+    .fill("Conservar el encuadre y cambiar la luz.");
+  await page.getByRole("button", { name: "Extender", exact: true }).click();
+  await page
+    .getByLabel("¿Cómo continúa la escena?")
+    .fill("La cámara se aleja despacio.");
+  await page
+    .getByRole("button", { name: "Cerrar editor de clip", exact: true })
+    .click();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await expect(page.getByLabel("¿Qué quieres cambiar?")).toHaveValue(
+    "Conservar el encuadre y cambiar la luz.",
+  );
+  await page.getByRole("button", { name: "Extender", exact: true }).click();
+  await expect(page.getByLabel("¿Cómo continúa la escena?")).toHaveValue(
+    "La cámara se aleja despacio.",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".preview-frame video")).toBeVisible();
+  await page.screenshot({ path: "artifacts/ux-mobile-preview.png" });
+  await page.getByRole("button", { name: "Configurar", exact: true }).click();
+  await expect(page.getByLabel("¿Cómo continúa la escena?")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Extender 10 segundos", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({ path: "artifacts/ux-mobile-configure.png" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: "artifacts/ux-desktop-clip.png" });
 });

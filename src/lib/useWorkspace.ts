@@ -36,6 +36,7 @@ export function useWorkspace() {
   const [data, setData] = useState<Workspace>({
     projects: [],
     scenes: [],
+    trash: [],
     assets: [],
     usage: [],
   });
@@ -143,7 +144,7 @@ export function useWorkspace() {
       for (const [index, id] of ids.entries()) {
         if (ctrl.signal.aborted) break;
         let scene = await db.getScene(id);
-        if (!scene) continue;
+        if (!scene || scene.deleted_at) continue;
         let task: GenerationTask | undefined;
         try {
           const selected = activeVersion(scene);

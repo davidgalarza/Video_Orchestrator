@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import type { WorkspaceController } from "../lib/useWorkspace";
 import * as db from "../lib/storage";
+import { getApiKey } from "../lib/settings";
 import { storeImage, downloadBlob } from "../lib/media";
 import {
   activeVersion,
@@ -423,7 +424,7 @@ export function Editor({
                       onClick={() => {
                         if (
                           window.confirm(
-                            "¿Eliminar esta escena y sus versiones guardadas?",
+                            "¿Mover este clip a la papelera? Podrás restaurarlo desde el proyecto.",
                           )
                         )
                           void w.action(() => db.deleteScene(scene.id));
@@ -481,16 +482,30 @@ function Inspector({
   const [title, setTitle] = useState(
     scene.title || `Escena ${scene.order + 1}`,
   );
-  const [mode, setMode] = useState<GenerationMode>("generate");
-  const [instruction, setInstruction] = useState("");
+  const [mode, setMode] = useState<GenerationMode>(
+    activeVersion(scene)?.interactionId ? "edit" : "generate",
+  );
+  const [editPrompt, setEditPrompt] = useState(scene.edit_prompt || "");
+  const [extendPrompt, setExtendPrompt] = useState(scene.extend_prompt || "");
+  const instruction = mode === "extend" ? extendPrompt : editPrompt;
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
+    "saved",
+  );
   const [uploading, setUploading] = useState(false);
   const version = activeVersion(scene),
     config = sceneSettings(scene),
-    busy = !!w.job;
+    busy = w.job?.sceneId === scene.id;
   const editable =
     !!version?.interactionId && version.settings.model === OMNI_MODEL;
   const save = (patch: Partial<Scene>) => {
-    void w.patch(scene.id, patch).catch((e) => w.notify(e.message, true));
+    setSaveState("saving");
+    void w
+      .patch(scene.id, patch)
+      .then(() => setSaveState("saved"))
+      .catch((e) => {
+        setSaveState("error");
+        w.notify(e.message, true);
+      });
   };
   const upload = async (file: File, role: "first" | "last" | "reference") => {
     setUploading(true);
@@ -535,12 +550,21 @@ function Inspector({
   return (
     <aside className="inspector" aria-label="Configurar escena">
       <div className="inspector-heading">
-        <span>Dirección de escena</span>
+        <span>Configurar clip</span>
         <WandSparkles size={16} />
       </div>
       <div className="inspector-content">
         <label>
-          Nombre de la escena
+          <span>
+            Nombre de la escena{" "}
+            <span className="save-indicator" role="status">
+              {saveState === "saving"
+                ? "Guardando…"
+                : saveState === "error"
+                  ? "No guardado"
+                  : "Guardado"}
+            </span>
+          </span>
           <input
             value={title}
             maxLength={60}
@@ -570,7 +594,9 @@ function Inspector({
               onClick={() => setMode(m)}
             >
               {m === "generate"
-                ? "Crear"
+                ? version
+                  ? "Nueva toma"
+                  : "Crear"
                 : m === "edit"
                   ? "Editar"
                   : "Extender"}
@@ -599,13 +625,21 @@ function Inspector({
               if (mode === "generate") {
                 setPrompt(e.target.value);
                 save({ prompt: e.target.value });
-              } else setInstruction(e.target.value);
+              } else if (mode === "edit") {
+                setEditPrompt(e.target.value);
+                save({ edit_prompt: e.target.value });
+              } else {
+                setExtendPrompt(e.target.value);
+                save({ extend_prompt: e.target.value });
+              }
             }}
             onKeyDown={(e) => {
               if (
                 (e.ctrlKey || e.metaKey) &&
                 e.key === "Enter" &&
-                !busy &&
+                !w.job &&
+                !uploading &&
+                (mode === "generate" ? prompt : instruction).trim() &&
                 !needsRecovery
               ) {
                 e.preventDefault();
@@ -616,201 +650,10 @@ function Inspector({
         </label>
         {mode === "generate" ? (
           <>
-            <div className="prompt-assist">
-              <span>Completa tu dirección</span>
-              <select
-                aria-label="Añadir indicación al prompt"
-                value=""
-                disabled={busy}
-                onChange={(e) => {
-                  const next = `${prompt.trim()} ${e.target.value}`.trim();
-                  setPrompt(next);
-                  save({ prompt: next });
-                }}
-              >
-                <option value="" disabled>
-                  Cámara, luz o sonido…
-                </option>
-                <option>Una sola toma continua, sin cortes.</option>
-                <option>La cámara se acerca suavemente al sujeto.</option>
-                <option>Luz natural suave, colores fieles.</option>
-                <option>Sonidos ambientales, sin diálogo.</option>
-                <option>Sin texto en pantalla.</option>
-              </select>
-            </div>
-            <section className="reference-section">
-              <div className="section-heading">
-                <h3>Referencias</h3>
-                <span>Opcional</span>
-              </div>
-              <div className="keyframe-grid">
-                {(["first", "last"] as const).map((role) => {
-                  const id =
-                      role === "first"
-                        ? scene.first_frame_asset_id
-                        : scene.last_frame_asset_id,
-                    asset = assets.find((a) => a.id === id),
-                    label =
-                      role === "first"
-                        ? "Fotograma inicial"
-                        : "Fotograma final";
-                  return (
-                    <div className="keyframe" key={role}>
-                      <div className="keyframe-picture">
-                        {asset ? (
-                          <img src={asset.data_url} alt={label} />
-                        ) : (
-                          <ImagePlus size={20} strokeWidth={1.4} />
-                        )}
-                        <label className="file-target">
-                          <input
-                            type="file"
-                            aria-label={`Subir ${label.toLowerCase()}`}
-                            accept="image/png,image/jpeg,image/webp"
-                            disabled={
-                              busy ||
-                              uploading ||
-                              (role === "last" && !scene.first_frame_asset_id)
-                            }
-                            onChange={(e) => {
-                              if (e.target.files?.[0])
-                                void upload(e.target.files[0], role);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        {asset && (
-                          <IconButton
-                            label={`Quitar ${label.toLowerCase()}`}
-                            disabled={busy}
-                            onClick={() =>
-                              save(
-                                role === "first"
-                                  ? {
-                                      first_frame_asset_id: undefined,
-                                      last_frame_asset_id: undefined,
-                                    }
-                                  : { last_frame_asset_id: undefined },
-                              )
-                            }
-                          >
-                            <X size={12} />
-                          </IconButton>
-                        )}
-                      </div>
-                      <select
-                        aria-label={label}
-                        disabled={
-                          busy ||
-                          (role === "last" && !scene.first_frame_asset_id)
-                        }
-                        value={id || ""}
-                        onChange={(e) =>
-                          save(
-                            role === "first"
-                              ? {
-                                  first_frame_asset_id:
-                                    e.target.value || undefined,
-                                  ...(!e.target.value
-                                    ? { last_frame_asset_id: undefined }
-                                    : {}),
-                                }
-                              : {
-                                  last_frame_asset_id:
-                                    e.target.value || undefined,
-                                },
-                          )
-                        }
-                      >
-                        <option value="">{label}</option>
-                        {assets.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.file_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-              {config.model === OMNI_MODEL && (
-                <>
-                  <div className="ref-chips">
-                    {(scene.reference_asset_ids || []).map((id) => {
-                      const a = assets.find((a) => a.id === id);
-                      return a ? (
-                        <span key={id}>
-                          <img src={a.data_url} alt="" />
-                          {a.file_name}
-                          <IconButton
-                            label={`Quitar referencia ${a.file_name}`}
-                            disabled={busy}
-                            onClick={() =>
-                              save({
-                                reference_asset_ids:
-                                  scene.reference_asset_ids?.filter(
-                                    (r) => r !== id,
-                                  ),
-                              })
-                            }
-                          >
-                            <X size={12} />
-                          </IconButton>
-                        </span>
-                      ) : null;
-                    })}
-                  </div>
-                  <select
-                    aria-label="Añadir referencia de personaje o estilo"
-                    value=""
-                    disabled={
-                      busy || (scene.reference_asset_ids?.length || 0) >= 3
-                    }
-                    onChange={(e) =>
-                      save({
-                        reference_asset_ids: [
-                          ...(scene.reference_asset_ids || []),
-                          e.target.value,
-                        ],
-                      })
-                    }
-                  >
-                    <option value="" disabled>
-                      + Personaje, producto o estilo
-                    </option>
-                    {assets
-                      .filter((a) => !scene.reference_asset_ids?.includes(a.id))
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.file_name}
-                        </option>
-                      ))}
-                  </select>
-                  <label className="text-button upload-reference">
-                    <Plus size={13} />
-                    Subir referencia
-                    <input
-                      type="file"
-                      aria-label="Subir referencia de personaje o estilo"
-                      accept="image/png,image/jpeg,image/webp"
-                      disabled={
-                        busy ||
-                        uploading ||
-                        (scene.reference_asset_ids?.length || 0) >= 3
-                      }
-                      onChange={(e) => {
-                        if (e.target.files?.[0])
-                          void upload(e.target.files[0], "reference");
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                </>
-              )}
-              <small className="subtle">
-                JPG, PNG o WebP · hasta 5 MB por imagen
-              </small>
-            </section>
+            <p className="prompt-info">
+              {prompt.length.toLocaleString("es")} caracteres{" "}
+              <span>⌘ / Ctrl + Enter para generar</span>
+            </p>
             <VideoControls
               value={config}
               disabled={busy}
@@ -823,6 +666,199 @@ function Inspector({
                 })
               }
             />
+            <details
+              className="reference-details"
+              open={
+                !!(
+                  scene.first_frame_asset_id ||
+                  scene.reference_asset_ids?.length
+                )
+              }
+            >
+              <summary>
+                <ImagePlus size={16} />
+                <span>
+                  Referencias visuales{" "}
+                  <small>Opcionales · fotogramas, personaje o estilo</small>
+                </span>
+                <ChevronDown size={14} />
+              </summary>
+              <section className="reference-section">
+                <div className="section-heading">
+                  <h3>Referencias</h3>
+                  <span>Opcional</span>
+                </div>
+                <div className="keyframe-grid">
+                  {(["first", "last"] as const).map((role) => {
+                    const id =
+                        role === "first"
+                          ? scene.first_frame_asset_id
+                          : scene.last_frame_asset_id,
+                      asset = assets.find((a) => a.id === id),
+                      label =
+                        role === "first"
+                          ? "Fotograma inicial"
+                          : "Fotograma final";
+                    return (
+                      <div className="keyframe" key={role}>
+                        <div className="keyframe-picture">
+                          {asset ? (
+                            <img src={asset.data_url} alt={label} />
+                          ) : (
+                            <ImagePlus size={20} strokeWidth={1.4} />
+                          )}
+                          <label className="file-target">
+                            <input
+                              type="file"
+                              aria-label={`Subir ${label.toLowerCase()}`}
+                              accept="image/png,image/jpeg,image/webp"
+                              disabled={
+                                busy ||
+                                uploading ||
+                                (role === "last" && !scene.first_frame_asset_id)
+                              }
+                              onChange={(e) => {
+                                if (e.target.files?.[0])
+                                  void upload(e.target.files[0], role);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                          {asset && (
+                            <IconButton
+                              label={`Quitar ${label.toLowerCase()}`}
+                              disabled={busy}
+                              onClick={() =>
+                                save(
+                                  role === "first"
+                                    ? {
+                                        first_frame_asset_id: undefined,
+                                        last_frame_asset_id: undefined,
+                                      }
+                                    : { last_frame_asset_id: undefined },
+                                )
+                              }
+                            >
+                              <X size={12} />
+                            </IconButton>
+                          )}
+                        </div>
+                        <select
+                          aria-label={label}
+                          disabled={
+                            busy ||
+                            (role === "last" && !scene.first_frame_asset_id)
+                          }
+                          value={id || ""}
+                          onChange={(e) =>
+                            save(
+                              role === "first"
+                                ? {
+                                    first_frame_asset_id:
+                                      e.target.value || undefined,
+                                    ...(!e.target.value
+                                      ? { last_frame_asset_id: undefined }
+                                      : {}),
+                                  }
+                                : {
+                                    last_frame_asset_id:
+                                      e.target.value || undefined,
+                                  },
+                            )
+                          }
+                        >
+                          <option value="">{label}</option>
+                          {assets.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.file_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+                {config.model === OMNI_MODEL && (
+                  <>
+                    <div className="ref-chips">
+                      {(scene.reference_asset_ids || []).map((id) => {
+                        const a = assets.find((a) => a.id === id);
+                        return a ? (
+                          <span key={id}>
+                            <img src={a.data_url} alt="" />
+                            {a.file_name}
+                            <IconButton
+                              label={`Quitar referencia ${a.file_name}`}
+                              disabled={busy}
+                              onClick={() =>
+                                save({
+                                  reference_asset_ids:
+                                    scene.reference_asset_ids?.filter(
+                                      (r) => r !== id,
+                                    ),
+                                })
+                              }
+                            >
+                              <X size={12} />
+                            </IconButton>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                    <select
+                      aria-label="Añadir referencia de personaje o estilo"
+                      value=""
+                      disabled={
+                        busy || (scene.reference_asset_ids?.length || 0) >= 3
+                      }
+                      onChange={(e) =>
+                        save({
+                          reference_asset_ids: [
+                            ...(scene.reference_asset_ids || []),
+                            e.target.value,
+                          ],
+                        })
+                      }
+                    >
+                      <option value="" disabled>
+                        + Personaje, producto o estilo
+                      </option>
+                      {assets
+                        .filter(
+                          (a) => !scene.reference_asset_ids?.includes(a.id),
+                        )
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.file_name}
+                          </option>
+                        ))}
+                    </select>
+                    <label className="text-button upload-reference">
+                      <Plus size={13} />
+                      Subir referencia
+                      <input
+                        type="file"
+                        aria-label="Subir referencia de personaje o estilo"
+                        accept="image/png,image/jpeg,image/webp"
+                        disabled={
+                          busy ||
+                          uploading ||
+                          (scene.reference_asset_ids?.length || 0) >= 3
+                        }
+                        onChange={(e) => {
+                          if (e.target.files?.[0])
+                            void upload(e.target.files[0], "reference");
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </>
+                )}
+                <small className="subtle">
+                  JPG, PNG o WebP · hasta 5 MB por imagen
+                </small>
+              </section>
+            </details>
           </>
         ) : (
           <p className="hint">
@@ -865,14 +901,18 @@ function Inspector({
             </div>
           </details>
         )}
+      </div>
+      <div className="generate-footer">
         {scene.error && (
           <div className="inline-error" role="alert">
             {scene.error}
           </div>
         )}
-      </div>
-      <div className="generate-footer">
-        {currentJob ? (
+        {!getApiKey() ? (
+          <button className="button primary full" onClick={openSettings}>
+            Conectar Google para generar
+          </button>
+        ) : currentJob ? (
           <button className="button full" onClick={w.pause}>
             <Pause size={16} />
             Pausar seguimiento
@@ -881,7 +921,7 @@ function Inspector({
           <>
             <button
               className="button primary full"
-              disabled={busy}
+              disabled={!!w.job}
               onClick={() =>
                 void w.run([scene.id], "generate", undefined, true)
               }
@@ -891,7 +931,7 @@ function Inspector({
             </button>
             <button
               className="text-button"
-              disabled={busy}
+              disabled={!!w.job}
               onClick={() => {
                 if (
                   window.confirm(
@@ -912,7 +952,7 @@ function Inspector({
           <button
             className="button primary full"
             disabled={
-              busy ||
+              !!w.job ||
               uploading ||
               !(mode === "generate" ? prompt : instruction).trim()
             }
@@ -931,7 +971,13 @@ function Inspector({
             </span>
           </button>
         )}
-        <small>Cada generación consume tu cuota de Google.</small>
+        <small>
+          {w.job && !currentJob
+            ? "Hay otro clip generándose. Puedes preparar este mientras termina."
+            : version
+              ? "Se creará una nueva versión. La anterior se conserva."
+              : "Cada generación consume tu cuota de Google."}
+        </small>
         <button className="text-button" onClick={openSettings}>
           Configurar mi API key
         </button>
