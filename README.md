@@ -5,7 +5,7 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 ## Qué puedes hacer
 
 - Generar vídeos con **Gemini Omni 1.1 Flash** usando tu propia API key de Google AI Studio. También se mantiene Veo 3.1.
-- Crear proyectos en blanco y organizar tus propias escenas.
+- Organizar cada proyecto como una biblioteca de clips, con búsqueda, filtros, prompts, referencias y versiones.
 - Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
 - Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
 - Elegir formato vertical/horizontal, duración y resolución por escena.
@@ -13,7 +13,14 @@ Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishra
 - Generar escenas pendientes en secuencia. La tanda se detiene ante un error para evitar solicitudes adicionales.
 - Pausar el seguimiento y recuperar una operación guardada después de recargar, sin lanzar otra generación.
 - Crear imágenes de referencia con Gemini 3.1 Flash Image.
-- Descargar clips originales o unir las escenas en un MP4 desde el navegador.
+- Descargar un clip o seleccionar varios para obtener un ZIP con sus vídeos originales y un archivo `clips.json` con prompts y ajustes.
+- Montar una secuencia opcional con los clips elegidos, ordenarla y exportarla en un MP4. Quitar un clip de la secuencia conserva el clip en el proyecto.
+
+## Dos formas de trabajar
+
+El proyecto abre en **Clips del proyecto**. Usa **Nuevo clip** o abre uno existente para generar, revisar versiones y descargarlo. Para seguir en un editor local, selecciona clips y pulsa **Descargar seleccionados · ZIP**: se incluye la versión activa de cada vídeo, sin recomprimir. Los borradores se excluyen y los nombres llevan un índice para evitar colisiones. El ZIP admite hasta 4 GB; para más material, descarga por grupos.
+
+Para un montaje rápido, selecciona clips y pulsa **Añadir a secuencia**. Ordena las tomas con las flechas, usa **Quitar de secuencia** para excluirlas y **Exportar vídeo** para unirlas. **Todos los clips** vuelve a la biblioteca. El orden del montaje se guarda aparte; los proyectos antiguos conservan su secuencia original.
 
 ## Inicio local
 

@@ -1884,3 +1884,254 @@ button {
     width: 100%;
   }
 }
+
+.workspace-navigation {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--line);
+}
+.workspace-navigation > span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.clips-content {
+  padding: 32px;
+  max-width: 1700px;
+  margin: 0 auto;
+}
+.clips-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.clips-heading h1 {
+  font-size: 1.6rem;
+}
+.clips-heading p {
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+.clips-heading > .button {
+  flex-shrink: 0;
+}
+.clips-filters {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 18px;
+}
+.clips-filters .search {
+  max-width: 350px;
+  width: 100%;
+}
+.clip-filter {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.clip-filter select {
+  width: 160px;
+}
+.clip-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  padding: 16px 0;
+}
+.clip-check {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 9px;
+  font-size: 0.82rem;
+}
+.clip-check input,
+.clip-checkbox input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #dee5ee;
+  cursor: pointer;
+}
+.selection-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.selection-note {
+  font-size: 0.8rem;
+  margin-bottom: 18px;
+}
+.clip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 24px;
+}
+.project-clip {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel);
+}
+.project-clip.is-checked {
+  border-color: #b9c9dc;
+}
+.clip-media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #0a0b0d;
+}
+.clip-open {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.clip-open > video,
+.clip-open > img,
+.clip-open > .clip-placeholder {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.clip-open-label {
+  position: absolute;
+  inset: auto 50% 12px auto;
+  transform: translateX(50%);
+  padding: 6px 9px;
+  font-size: 0.75rem;
+  background: #17181b;
+  border-radius: 5px;
+  opacity: 0;
+}
+.clip-open:hover .clip-open-label,
+.clip-open:focus-visible .clip-open-label {
+  opacity: 1;
+}
+.clip-checkbox {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  padding: 6px;
+  border-radius: 5px;
+  background: #17181b;
+}
+.clip-version {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: #17181b;
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+.clip-info {
+  padding: 16px;
+}
+.clip-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.clip-title > button {
+  text-align: left;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clip-title > span {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+.clip-prompt {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  min-height: 2.6em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clip-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.clip-in-sequence {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .workspace-navigation {
+    padding: 14px 20px;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .clips-content {
+    padding: 24px 20px;
+  }
+  .clips-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+  .clips-filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .clips-filters .search {
+    max-width: none;
+  }
+  .clip-filter {
+    justify-content: space-between;
+  }
+  .selection-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .clip-selection-bar {
+    gap: 12px;
+  }
+  .clip-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+    gap: 20px;
+  }
+  .project-clips .editor-top {
+    flex-wrap: wrap;
+    gap: 18px;
+  }
+}
+@media (max-width: 760px) {
+  .scene-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .scene-actions > .inline {
+    flex-wrap: wrap;
+  }
+}

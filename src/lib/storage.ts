@@ -66,6 +66,7 @@ export async function createProject(
   const project: Project = {
     id: crypto.randomUUID(),
     name: name.trim() || "Proyecto sin título",
+    sequence_ids: [],
     created_at: now(),
     updated_at: now(),
   };
@@ -164,7 +165,43 @@ export async function reorderScenes(projectId: string, ids: string[]) {
   await tx.done;
 }
 export async function deleteScene(id: string) {
-  await (await connection).delete("scenes", id);
+  const db = await connection;
+  const tx = db.transaction(["scenes", "projects"], "readwrite");
+  const scene = await tx.objectStore("scenes").get(id);
+  if (scene) {
+    const project = await tx.objectStore("projects").get(scene.project_id);
+    if (project?.sequence_ids)
+      await tx
+        .objectStore("projects")
+        .put({
+          ...project,
+          sequence_ids: project.sequence_ids.filter((item) => item !== id),
+          updated_at: now(),
+        });
+    await tx.objectStore("scenes").delete(id);
+  }
+  await tx.done;
+}
+export async function saveSequence(projectId: string, ids: string[]) {
+  const db = await connection;
+  const tx = db.transaction(["projects", "scenes"], "readwrite");
+  const project = await tx.objectStore("projects").get(projectId);
+  const scenes = await tx
+    .objectStore("scenes")
+    .index("by-project")
+    .getAll(projectId);
+  if (
+    !project ||
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => !scenes.some((s) => s.id === id))
+  )
+    throw new Error(
+      "Los clips del proyecto cambiaron. Vuelve a seleccionarlos.",
+    );
+  await tx
+    .objectStore("projects")
+    .put({ ...project, sequence_ids: ids, updated_at: now() });
+  await tx.done;
 }
 export async function renameProject(id: string, name: string) {
   const db = await connection;
@@ -186,12 +223,10 @@ export async function deleteProject(id: string) {
     await tx.objectStore("scenes").delete(scene.id);
   for (const asset of await tx.objectStore("assets").getAll())
     if (asset.project_ids.includes(id))
-      await tx
-        .objectStore("assets")
-        .put({
-          ...asset,
-          project_ids: asset.project_ids.filter((p) => p !== id),
-        });
+      await tx.objectStore("assets").put({
+        ...asset,
+        project_ids: asset.project_ids.filter((p) => p !== id),
+      });
   await tx.objectStore("projects").delete(id);
   await tx.done;
 }
@@ -203,21 +238,19 @@ export async function deleteAsset(id: string) {
   const tx = db.transaction(["assets", "scenes"], "readwrite");
   await tx.objectStore("assets").delete(id);
   for (const scene of await tx.objectStore("scenes").getAll())
-    await tx
-      .objectStore("scenes")
-      .put({
-        ...scene,
-        first_frame_asset_id:
-          scene.first_frame_asset_id === id
-            ? undefined
-            : scene.first_frame_asset_id,
-        last_frame_asset_id:
-          scene.last_frame_asset_id === id
-            ? undefined
-            : scene.last_frame_asset_id,
-        reference_asset_ids: scene.reference_asset_ids?.filter(
-          (ref) => ref !== id,
-        ),
-      });
+    await tx.objectStore("scenes").put({
+      ...scene,
+      first_frame_asset_id:
+        scene.first_frame_asset_id === id
+          ? undefined
+          : scene.first_frame_asset_id,
+      last_frame_asset_id:
+        scene.last_frame_asset_id === id
+          ? undefined
+          : scene.last_frame_asset_id,
+      reference_asset_ids: scene.reference_asset_ids?.filter(
+        (ref) => ref !== id,
+      ),
+    });
   await tx.done;
 }

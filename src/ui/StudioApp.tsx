@@ -22,7 +22,7 @@ import * as db from "../lib/storage";
 import { getApiKey, getDefaults } from "../lib/settings";
 import { downloadBlob } from "../lib/media";
 import { Home } from "./Home";
-import { Editor } from "./Editor";
+import { ProjectWorkspace } from "./ProjectWorkspace";
 import { Settings } from "./Settings";
 import { Library } from "./Library";
 import { Dismiss, IconButton } from "./common";
@@ -255,7 +255,7 @@ export function StudioApp() {
                 <Library key="videos" workspace={w} videos open={open} />
               )}
               {project && (
-                <Editor
+                <ProjectWorkspace
                   key={project.id}
                   project={project}
                   workspace={w}

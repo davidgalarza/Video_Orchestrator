@@ -12,9 +12,9 @@ async function createProject(page: Page, sceneCount = 1) {
     .locator(".home-page")
     .getByRole("button", { name: "Nuevo proyecto", exact: true })
     .click();
-  await expect(page.getByLabel("Nombre de la escena")).toHaveValue(
-    "Primera escena",
-  );
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
   for (let i = 0; i < sceneCount; i++) {
     if (i) {
       await page
@@ -133,6 +133,9 @@ test("editor workflow: key, blank project, references, versions, persistence and
     input: expect.stringContaining("Extend this video"),
   });
   await page.reload();
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
   await expect(page.locator(".preview-frame video")).toBeVisible();
   await expect
     .poll(() =>
@@ -220,6 +223,9 @@ test("paused generations recover after reload without creating a second video", 
   ).toBeVisible();
   ready = true;
   await page.reload();
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
   await page.getByRole("button", { name: "Recuperar resultado" }).click();
   await expect(page.locator(".preview-frame video")).toBeVisible();
   expect(posts).toBe(1);
@@ -297,6 +303,10 @@ test("exports mixed silent/audio clips in a single playable MP4 using the local 
     { clip, silent },
   );
   await page.reload();
+  await page.getByLabel("Seleccionar clips visibles", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Añadir a secuencia", exact: true })
+    .click();
   await expect(page.locator(".preview-frame video")).toBeVisible();
   const downloaded = page.waitForEvent("download");
   await page
@@ -328,4 +338,146 @@ test("exports mixed silent/audio clips in a single playable MP4 using the local 
   expect(result.duration).toBeGreaterThan(1.8);
   expect(result.width).toBe(720);
   expect(result.height).toBe(1280);
+});
+
+test("clip library downloads originals in ZIP and keeps an optional sequence after reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await createProject(page, 3);
+  await page.evaluate(
+    async ({ clip, silent }) => {
+      const database = await new Promise<IDBDatabase>((resolve) => {
+        const req = indexedDB.open("vid-gen-studio", 1);
+        req.onsuccess = () => resolve(req.result);
+      });
+      await new Promise<void>((resolve) => {
+        const tx = database.transaction("scenes", "readwrite");
+        const req = tx.objectStore("scenes").getAll();
+        req.onsuccess = () =>
+          req.result
+            .sort((a, b) => a.order - b.order)
+            .forEach((scene, i) => {
+              if (i < 2)
+                tx.objectStore("scenes").put({
+                  ...scene,
+                  status: "completed",
+                  video_blob: new Blob(
+                    [
+                      Uint8Array.from(atob(i ? silent : clip), (c) =>
+                        c.charCodeAt(0),
+                      ),
+                    ],
+                    { type: "video/mp4" },
+                  ),
+                });
+            });
+        tx.oncomplete = () => resolve();
+      });
+      database.close();
+    },
+    { clip, silent },
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: /Clips del proyecto/ }),
+  ).toBeVisible();
+  await expect(page.locator(".project-clip")).toHaveCount(3);
+  await page.getByLabel("Seleccionar clips visibles", { exact: true }).check();
+  await expect(page.locator(".selection-note")).toContainText("2 clips");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Descargar seleccionados/ }).click();
+  const zip = await downloaded;
+  expect(zip.suggestedFilename()).toMatch(/-clips.zip$/);
+  const bytes = readFileSync((await zip.path())!);
+  const singleDownload = page.waitForEvent("download");
+  await page
+    .getByRole("button", {
+      name: "Descargar clip: Primera escena",
+      exact: true,
+    })
+    .click();
+  const single = await singleDownload;
+  expect(readFileSync((await single.path())!).toString("base64")).toBe(clip);
+
+  // Verify stored ZIP local entries contain precisely the selected original media.
+  const entries = new Map<string, Buffer>();
+  let offset = 0;
+  while (bytes.readUInt32LE(offset) === 0x04034b50) {
+    const size = bytes.readUInt32LE(offset + 18),
+      nameSize = bytes.readUInt16LE(offset + 26),
+      extra = bytes.readUInt16LE(offset + 28);
+    const name = bytes
+      .subarray(offset + 30, offset + 30 + nameSize)
+      .toString("utf8");
+    const start = offset + 30 + nameSize + extra;
+    entries.set(name, bytes.subarray(start, start + size));
+    offset = start + size;
+  }
+  expect(
+    [...entries.keys()].filter((name) => name.endsWith(".mp4")),
+  ).toHaveLength(2);
+  expect(
+    [...entries.values()].some((data) => data.toString("base64") === clip),
+  ).toBe(true);
+  expect(
+    [...entries.values()].some((data) => data.toString("base64") === silent),
+  ).toBe(true);
+  await page
+    .getByRole("button", { name: "Deseleccionar", exact: true })
+    .click();
+  await page.getByLabel("Filtrar clips").selectOption("ready");
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+  await page.getByLabel("Seleccionar clips visibles", { exact: true }).check();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: "artifacts/clips-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: "artifacts/clips-mobile.png", fullPage: true });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page
+    .getByRole("button", { name: "Añadir a secuencia", exact: true })
+    .click();
+  await expect(page.locator(".scene-card")).toHaveCount(2);
+  await page.locator(".scene-card").last().click();
+  await page
+    .getByRole("button", { name: "Mover escena a la izquierda", exact: true })
+    .click();
+  await expect(page.locator(".scene-card").first()).toContainText("Escena 2");
+  await page.reload();
+  await expect(page.locator(".project-clip")).toHaveCount(3);
+  await page
+    .getByRole("button", { name: "Secuencia · 2", exact: true })
+    .click();
+  await expect(page.locator(".scene-card").first()).toContainText("Escena 2");
+  await page.screenshot({
+    path: "artifacts/sequence-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.screenshot({
+    path: "artifacts/sequence-mobile.png",
+    fullPage: true,
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+
+  await page
+    .getByRole("button", { name: "Quitar de secuencia", exact: true })
+    .click();
+  await expect(page.locator(".scene-card")).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Todos los clips", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(3);
 });

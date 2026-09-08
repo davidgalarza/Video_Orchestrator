@@ -21,6 +21,14 @@ export interface Project {
   name: string;
   created_at: string;
   updated_at?: string;
+  sequence_ids?: string[];
+}
+export function sequenceScenes(project: Project, scenes: Scene[]): Scene[] {
+  const own = scenes.filter((s) => s.project_id === project.id);
+  // Projects created before optional sequences retain their original montage.
+  return project.sequence_ids === undefined
+    ? own.slice().sort((a, b) => a.order - b.order)
+    : project.sequence_ids.flatMap((id) => own.find((s) => s.id === id) || []);
 }
 export interface Asset {
   id: string;

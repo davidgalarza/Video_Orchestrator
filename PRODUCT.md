@@ -20,7 +20,7 @@ Fork of rajjitlai/Video_Orchestrator under MIT. React, TypeScript and Vite; brow
 
 ## Operating Context
 
-Primary workflow: blank projects, freely arranged scenes, reusable image references and multiple versions. Users review prompts before requests that consume their Google quota. Downloads and local data are not synchronized across devices.
+Primary workflow: project clip libraries, individual editing, reusable image references and multiple versions. Users can download selected original clips in ZIP for a local editor, or explicitly assemble an optional sequence with its own saved order. Users review prompts before requests that consume their Google quota. Downloads and local data are not synchronized across devices.
 
 ## Product Principles
 

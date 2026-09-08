@@ -4,6 +4,7 @@ import {
   activeVersion,
   DEFAULT_VIDEO,
   sceneBlob,
+  sequenceScenes,
   type ClipVersion,
 } from "../src/types";
 describe("local projects and non-destructive iterations", () => {
@@ -121,5 +122,62 @@ describe("local projects and non-destructive iterations", () => {
     const clean = (await db.getScene(scene.id))!;
     expect(clean.first_frame_asset_id).toBeUndefined();
     expect(clean.reference_asset_ids).toEqual([]);
+  });
+});
+
+describe("optional sequences", () => {
+  it("retains the montage order of legacy projects and ignores stale IDs", async () => {
+    const p = await db.createProject(
+      "Legacy",
+      [
+        { title: "One", prompt: "" },
+        { title: "Two", prompt: "" },
+      ],
+      DEFAULT_VIDEO,
+    );
+    const clips = (await db.readWorkspace()).scenes.filter(
+      (s) => s.project_id === p.id,
+    );
+    expect(
+      sequenceScenes({ ...p, sequence_ids: undefined }, clips).map((s) => s.id),
+    ).toEqual(clips.map((s) => s.id));
+    expect(
+      sequenceScenes(
+        { ...p, sequence_ids: ["deleted", clips[1].id] },
+        clips,
+      ).map((s) => s.id),
+    ).toEqual([clips[1].id]);
+  });
+  it("persists subset order independently from the clip library and removes deleted references", async () => {
+    const p = await db.createProject(
+      "Clips",
+      [1, 2, 3].map((n) => ({ title: `Clip ${n}`, prompt: "" })),
+      DEFAULT_VIDEO,
+    );
+    const clips = (await db.readWorkspace()).scenes.filter(
+      (s) => s.project_id === p.id,
+    );
+    expect(p.sequence_ids).toEqual([]);
+    await db.saveSequence(p.id, [clips[2].id, clips[0].id]);
+    let saved = (await db.readWorkspace()).projects.find(
+      (item) => item.id === p.id,
+    )!;
+    expect(saved.sequence_ids).toEqual([clips[2].id, clips[0].id]);
+    expect(
+      (await db.readWorkspace()).scenes
+        .filter((s) => s.project_id === p.id)
+        .map((s) => s.id),
+    ).toEqual(clips.map((s) => s.id));
+    await expect(db.saveSequence(p.id, ["foreign"])).rejects.toThrow(
+      "cambiaron",
+    );
+    await expect(
+      db.saveSequence(p.id, [clips[0].id, clips[0].id]),
+    ).rejects.toThrow("cambiaron");
+    await db.deleteScene(clips[2].id);
+    saved = (await db.readWorkspace()).projects.find(
+      (item) => item.id === p.id,
+    )!;
+    expect(saved.sequence_ids).toEqual([clips[0].id]);
   });
 });

@@ -26,6 +26,7 @@ import {
   activeVersion,
   sceneBlob,
   sceneSettings,
+  sequenceScenes,
   OMNI_MODEL,
   type Asset,
   type GenerationMode,
@@ -38,13 +39,22 @@ export function Editor({
   project,
   workspace: w,
   settings,
+  initialSceneId = "",
+  sequenceMode = false,
+  browseClips,
 }: {
   project: Project;
   workspace: WorkspaceController;
   settings: () => void;
+  initialSceneId?: string;
+  sequenceMode?: boolean;
+  browseClips: () => void;
 }) {
-  const scenes = w.scenes.filter((s) => s.project_id === project.id);
-  const [selectedId, setSelectedId] = useState(scenes[0]?.id || "");
+  const allScenes = w.scenes.filter((s) => s.project_id === project.id);
+  const scenes = sequenceMode ? sequenceScenes(project, allScenes) : allScenes;
+  const [selectedId, setSelectedId] = useState(
+    initialSceneId || scenes[0]?.id || "",
+  );
   const [safe, setSafe] = useState(false);
   const [exporting, setExporting] = useState(false);
   const scene = scenes.find((s) => s.id === selectedId) || scenes[0];
@@ -81,7 +91,7 @@ export function Editor({
       to = from + offset;
     if (to < 0 || to >= ids.length) return;
     [ids[from], ids[to]] = [ids[to], ids[from]];
-    void w.action(() => db.reorderScenes(project.id, ids));
+    void w.action(() => db.saveSequence(project.id, ids));
   };
   const exportVideo = async () => {
     if (!ready.length) return;
@@ -154,18 +164,20 @@ export function Editor({
               <span className="count">{pending.length}</span>
             )}
           </button>
-          <button
-            className="button primary compact"
-            disabled={!ready.length || exporting || busy}
-            onClick={() => void exportVideo()}
-          >
-            {exporting ? (
-              <LoaderCircle size={15} className="spin" />
-            ) : (
-              <Download size={15} />
-            )}
-            <span>{exporting ? "Exportando…" : "Exportar vídeo"}</span>
-          </button>
+          {sequenceMode && (
+            <button
+              className="button primary compact"
+              disabled={!ready.length || exporting || busy}
+              onClick={() => void exportVideo()}
+            >
+              {exporting ? (
+                <LoaderCircle size={15} className="spin" />
+              ) : (
+                <Download size={15} />
+              )}
+              <span>{exporting ? "Exportando…" : "Exportar vídeo"}</span>
+            </button>
+          )}
         </div>
       </div>
       {scene ? (
@@ -265,17 +277,24 @@ export function Editor({
               <div className="section-heading">
                 <div>
                   <h2>
-                    Tu secuencia <span className="count">{scenes.length}</span>
+                    {sequenceMode ? "Tu secuencia" : "Clips del proyecto"}{" "}
+                    <span className="count">{scenes.length}</span>
                   </h2>
                   <span>
-                    {total} s{" "}
-                    {ready.length < scenes.length
-                      ? "previstos"
-                      : "de secuencia"}{" "}
+                    {sequenceMode ? `${total} s` : `${scenes.length} clips`}{" "}
+                    {sequenceMode
+                      ? ready.length < scenes.length
+                        ? "previstos"
+                        : "de secuencia"
+                      : ""}{" "}
                     · {ready.length} escenas listas
                   </span>
                 </div>
-                <AddButton onClick={() => void add()}>Añadir escena</AddButton>
+                <AddButton
+                  onClick={sequenceMode ? browseClips : () => void add()}
+                >
+                  {sequenceMode ? "Elegir clips" : "Añadir escena"}
+                </AddButton>
               </div>
               <div className="scene-strip" aria-label="Escenas del proyecto">
                 {scenes.map((s, i) => (
@@ -342,26 +361,51 @@ export function Editor({
                   Escena {scenes.indexOf(scene) + 1} de {scenes.length}
                 </span>
                 <div className="inline">
-                  <IconButton
-                    label="Mover escena a la izquierda"
-                    disabled={busy || scenes[0].id === scene.id}
-                    onClick={() => move(-1)}
-                  >
-                    <ArrowLeft size={15} />
-                  </IconButton>
-                  <IconButton
-                    label="Mover escena a la derecha"
-                    disabled={busy || scenes.at(-1)?.id === scene.id}
-                    onClick={() => move(1)}
-                  >
-                    <ArrowRight size={15} />
-                  </IconButton>
+                  {sequenceMode && (
+                    <>
+                      <IconButton
+                        label="Mover escena a la izquierda"
+                        disabled={busy || scenes[0].id === scene.id}
+                        onClick={() => move(-1)}
+                      >
+                        <ArrowLeft size={15} />
+                      </IconButton>
+                      <IconButton
+                        label="Mover escena a la derecha"
+                        disabled={busy || scenes.at(-1)?.id === scene.id}
+                        onClick={() => move(1)}
+                      >
+                        <ArrowRight size={15} />
+                      </IconButton>
+                      <button
+                        className="text-button"
+                        disabled={busy}
+                        onClick={() =>
+                          void w.action(() =>
+                            db.saveSequence(
+                              project.id,
+                              scenes
+                                .filter((s) => s.id !== scene.id)
+                                .map((s) => s.id),
+                            ),
+                          )
+                        }
+                      >
+                        Quitar de secuencia
+                      </button>
+                    </>
+                  )}
                   <IconButton
                     label="Duplicar escena"
                     disabled={busy}
                     onClick={() =>
                       void w.action(async () => {
                         const copy = await db.duplicateScene(scene.id);
+                        if (sequenceMode)
+                          await db.saveSequence(project.id, [
+                            ...scenes.map((s) => s.id),
+                            copy.id,
+                          ]);
                         setSelectedId(copy.id);
                       })
                     }
@@ -396,12 +440,20 @@ export function Editor({
         </div>
       ) : (
         <Empty
-          title="La primera escena está por escribir"
+          title={
+            sequenceMode
+              ? "Elige los clips de tu secuencia"
+              : "La primera escena está por escribir"
+          }
           action={
-            <AddButton onClick={() => void add()}>Añadir escena</AddButton>
+            <AddButton onClick={sequenceMode ? browseClips : () => void add()}>
+              {sequenceMode ? "Elegir clips" : "Añadir escena"}
+            </AddButton>
           }
         >
-          Añade una escena para empezar a editar tu vídeo.
+          {sequenceMode
+            ? "Selecciona clips en el proyecto y pulsa Añadir a secuencia. Podrás ordenarlos aquí y exportar un vídeo unido."
+            : "Añade una escena para empezar a editar tu vídeo."}
         </Empty>
       )}
     </div>
