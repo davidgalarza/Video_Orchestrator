@@ -101,7 +101,14 @@ describe("Omni integration", () => {
         return response({
           id: "op-1",
           status: "completed",
-          output_video: { data: btoa("video"), mime_type: "video/mp4" },
+          steps: [
+            {
+              type: "model_output",
+              content: [
+                { type: "video", data: btoa("video"), mime_type: "video/mp4" },
+              ],
+            },
+          ],
         });
       });
     vi.stubGlobal("fetch", fetcher);
@@ -122,15 +129,18 @@ describe("Omni integration", () => {
     expect(fetcher.mock.calls[1][0]).toMatch(/interactions\/op-1$/);
   });
   it("recovers using GET without issuing another paid POST", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        response({
-          id: "saved-op",
-          status: "completed",
-          output_video: { data: btoa("result") },
-        }),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        id: "saved-op",
+        status: "completed",
+        steps: [
+          {
+            type: "model_output",
+            content: [{ type: "video", data: btoa("result") }],
+          },
+        ],
+      }),
+    );
     vi.stubGlobal("fetch", fetcher);
     await generateVideo({
       task: { ...task, remoteId: "saved-op" },
@@ -202,15 +212,13 @@ describe("Omni integration", () => {
   it("fails clearly on a terminal operation instead of polling forever", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          response({
-            id: "op",
-            status: "failed",
-            errors: [{ message: "Safety blocked" }],
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        response({
+          id: "op",
+          status: "failed",
+          errors: [{ message: "Safety blocked" }],
+        }),
+      ),
     );
     await expect(
       generateVideo({
@@ -271,5 +279,111 @@ describe("media and Veo compatibility", () => {
     expect(() =>
       validateSettings({ ...veo.settings, duration: 4, resolution: "1080p" }),
     ).toThrow("8 segundos");
+  });
+});
+
+describe("raw REST video responses", () => {
+  it("ignores user input and thought media, and reports the model explanation without leaking the key", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      response({
+        id: "saved",
+        status: "completed",
+        steps: [
+          {
+            type: "user_input",
+            content: [{ type: "video", data: btoa("input") }],
+          },
+          {
+            type: "thought",
+            content: [{ type: "text", text: "private reasoning" }],
+          },
+          {
+            type: "model_output",
+            content: [{ type: "text", text: "Cannot generate: secret-key" }],
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      generateVideo({
+        task: { ...task, remoteId: "saved" },
+        images: [],
+        apiKey: "secret-key",
+        signal: new AbortController().signal,
+        onProgress: vi.fn(),
+        onRemoteId: vi.fn(),
+      }),
+    ).rejects.toThrow("Google respondió sin vídeo: Cannot generate: [clave]");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "files/abc-123",
+    "https://generativelanguage.googleapis.com/v1beta/files/abc-123:download?alt=media",
+  ])("retrieves a REST URI through Files API: %s", async (uri) => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          id: "op",
+          status: "completed",
+          steps: [
+            {
+              type: "model_output",
+              content: [{ type: "video", uri, mime_type: "video/mp4" }],
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(response({ state: "ACTIVE" }))
+      .mockResolvedValueOnce(
+        new Response("video", { headers: { "content-type": "video/mp4" } }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await generateVideo({
+      task: { ...task, remoteId: "op" },
+      images: [],
+      apiKey: "key",
+      signal: new AbortController().signal,
+      onProgress: vi.fn(),
+      onRemoteId: vi.fn(),
+    });
+    expect(await result.blob.text()).toBe("video");
+    expect(fetcher.mock.calls[1][0]).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/files/abc-123",
+    );
+    expect(String(fetcher.mock.calls[2][0])).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/files/abc-123:download?alt=media",
+    );
+    expect(
+      fetcher.mock.calls.every(
+        ([, init]) => !init.method || init.method === "GET",
+      ),
+    ).toBe(true);
+  });
+  it("waits for processing files and downloads only once active", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(response({ state: "PROCESSING" }))
+        .mockResolvedValueOnce(response({ state: "ACTIVE" }))
+        .mockResolvedValueOnce(new Response("ready video"));
+      vi.stubGlobal("fetch", fetcher);
+      const download = downloadVideo({ uri: "files/test" }, "key");
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await (await download).text()).toBe("ready video");
+      expect(fetcher).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("stops on file processing failure without downloading", async () => {
+    const fetcher = vi.fn().mockResolvedValue(response({ state: "FAILED" }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(downloadVideo({ uri: "files/test" }, "key")).rejects.toThrow(
+      "preparar el archivo",
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

@@ -19,8 +19,20 @@ interface Interaction {
   id?: string;
   status?: string;
   output_video?: VideoOutput;
+  steps?: {
+    type?: string;
+    content?: (VideoOutput & { type?: string; text?: string })[];
+  }[];
   error?: { message?: string };
   errors?: { message?: string }[];
+}
+function modelOutput(result: Interaction) {
+  // output_video is an SDK convenience; the raw REST response uses steps.
+  return (
+    result.steps
+      ?.filter((step) => step.type === "model_output")
+      .flatMap((step) => step.content || []) || []
+  );
 }
 interface VeoOperation {
   name?: string;
@@ -243,7 +255,9 @@ export async function downloadVideo(
     throw new Error(
       "Google no devolvió un vídeo. Revisa el prompt y las restricciones del modelo.",
     );
-  const url = new URL(output.uri);
+  const url = new URL(
+    /^files\/[\w-]+$/.test(output.uri) ? `${BASE}/${output.uri}` : output.uri,
+  );
   if (
     url.protocol !== "https:" ||
     !["googleapis.com", "googleusercontent.com"].some(
@@ -252,6 +266,31 @@ export async function downloadVideo(
     )
   )
     throw new Error("Google devolvió una dirección de descarga no reconocida.");
+  const file =
+    url.hostname === "generativelanguage.googleapis.com"
+      ? url.pathname.match(/^\/v1beta\/files\/([\w-]+)(?::download)?$/)
+      : null;
+  if (file) {
+    const pollingSignal = signal || AbortSignal.timeout(15 * 60 * 1000);
+    for (;;) {
+      const info = await request<{
+        state?: string;
+        error?: { message?: string };
+      }>(`${BASE}/files/${file[1]}`, apiKey, { signal: pollingSignal });
+      if (info.state === "ACTIVE") break;
+      if (info.state === "FAILED")
+        throw new Error(
+          info.error?.message || "Google no pudo preparar el archivo de vídeo.",
+        );
+      if (info.state !== "PROCESSING")
+        throw new Error(
+          "Google devolvió un estado de archivo no reconocido. Recupera el resultado más tarde.",
+        );
+      await delay(5000, pollingSignal);
+    }
+    url.pathname = `/v1beta/files/${file[1]}:download`;
+    url.search = "?alt=media";
+  }
   // Signed storage links must not receive the user's API key.
   const headers =
     url.hostname === "generativelanguage.googleapis.com"
@@ -332,13 +371,27 @@ export async function generateVideo(args: {
           result.errors?.map((e) => e.message).join(" ") ||
           `La generación terminó con estado ${result.status}.`,
       );
-    if (!result.output_video)
+    const content = modelOutput(result);
+    const video =
+      content.findLast(
+        (part) => part.type === "video" && (part.data || part.uri),
+      ) || result.output_video;
+    if (!video) {
+      const detail = content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text || "")
+        .join(" ")
+        .replaceAll(apiKey, "[clave]")
+        .slice(0, 1500);
       throw new Error(
-        "No se generó un vídeo. Revisa el prompt o las referencias.",
+        detail
+          ? `Google respondió sin vídeo: ${detail}`
+          : "Google terminó la solicitud sin incluir un vídeo ni explicar el motivo. Puedes recuperar el resultado antes de generar de nuevo.",
       );
+    }
     onProgress("Guardando el vídeo…");
     return {
-      blob: await downloadVideo(result.output_video, apiKey, signal),
+      blob: await downloadVideo(video, apiKey, signal),
       interactionId: result.id,
     };
   }

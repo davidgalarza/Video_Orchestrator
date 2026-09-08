@@ -50,7 +50,12 @@ test("editor workflow: key, blank project, references, versions, persistence and
         json: {
           id: req.url().split("/").at(-1),
           status: "completed",
-          output_video: { data: clip, mime_type: "video/mp4" },
+          steps: [
+            {
+              type: "model_output",
+              content: [{ type: "video", data: clip, mime_type: "video/mp4" }],
+            },
+          ],
         },
       });
     else await route.fulfill({ json: { models: [] } });
@@ -209,7 +214,12 @@ test("paused generations recover after reload without creating a second video", 
           ? {
               id: "recoverable",
               status: "completed",
-              output_video: { data: clip },
+              steps: [
+                {
+                  type: "model_output",
+                  content: [{ type: "video", data: clip }],
+                },
+              ],
             }
           : { id: "recoverable", status: "in_progress" },
       });
