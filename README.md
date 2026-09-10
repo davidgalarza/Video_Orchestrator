@@ -1,126 +1,81 @@
 # Vidgen Studio
 
-Editor de vídeo de uso general, basado en [Video Orchestrator de Rajjit Laishram](https://github.com/rajjitlai/Video_Orchestrator). Interfaz en español, React 19 + TypeScript + Vite, almacenamiento local y despliegue estático en Vercel.
+**Genera clips, organízalos y monta una secuencia desde el navegador.**
 
-## Qué puedes hacer
+Editor de vídeo de uso general con interfaz en español, React, TypeScript y Vite. Cada persona utiliza su propia API key de Google. Los proyectos y los vídeos se guardan localmente; el montaje y la exportación se procesan en tu dispositivo.
 
-- Generar vídeos con **Gemini Omni 1.1 Flash** usando tu propia API key de Google AI Studio. También se mantiene Veo 3.1.
-- Organizar cada proyecto como una biblioteca de clips, con búsqueda, filtros, prompts, referencias y versiones.
-- Marcar favoritos y ocultar descartados sin borrar sus vídeos; recuperarlos desde el filtro **Descartados**.
-- Comparar dos clips con reproducción, desplazamiento y selección de audio compartidos. Los clips derivados permiten **Comparar con origen** directamente.
-- Usar **Crear otro parecido** para abrir un borrador con el prompt, los ajustes y las referencias reutilizados, sin iniciar una generación.
-- Editar, duplicar, ordenar y eliminar escenas, con guardado local automático.
-- Recuperar clips eliminados desde la papelera o con **Deshacer**, conservando sus versiones y su posición en la secuencia.
-- Usar fotogramas inicial/final y hasta tres referencias de personaje, producto o estilo en Omni.
-- Elegir referencias desde una galería con búsqueda, miniaturas completas y vista ampliada. Subir imágenes por botón o arrastrándolas al selector; quedan guardadas en Referencias para reutilizarlas. La selección se aplica al confirmar, y cancelar conserva las imágenes que ya usaba el clip.
-- Elegir formato vertical/horizontal, duración y resolución por escena.
-- Crear clips editados o extendidos a partir de una toma con Omni, conservando el original y su enlace de origen. La extensión admite hasta 40 segundos.
-- Generar escenas pendientes en secuencia. La tanda se detiene ante un error para evitar solicitudes adicionales.
-- Elegir de 1 a 20 clips por solicitud y seguir preparando o enviando clips mientras avanza una cola en segundo plano.
-- Pausar el seguimiento y recuperar una operación guardada después de recargar, sin lanzar otra generación.
-- Crear imágenes de referencia con Gemini 3.1 Flash Image.
-- Descargar clips individuales o en ZIP en resolución original, 720p, 1080p o 4K; conservar siempre los originales. Incluir opcionalmente `clips.json` con prompts, ajustes y datos de la descarga.
-- Montar una secuencia opcional con los clips elegidos, ordenarla y exportarla en un MP4. Quitar un clip de la secuencia conserva el clip en el proyecto.
+Este proyecto es un fork independiente de [Video Orchestrator, de Rajjit Laishram](https://github.com/rajjitlai/Video_Orchestrator). Conserva su licencia y atribución. No es un producto oficial de Google.
 
-## Dos formas de trabajar
+[English overview](README.en.md) · [Guía de uso](docs/usage.md) · [Despliegue](docs/deployment.md) · [Contribuir](CONTRIBUTING.md) · [Problemas frecuentes](docs/troubleshooting.md)
 
-El proyecto abre en **Clips del proyecto**. Usa **Nuevo clip** o abre uno existente para generar, revisar versiones y descargarlo en un modal individual. Al cerrarlo, vuelves a la biblioteca y los cambios quedan guardados. Para seguir en un editor local, selecciona clips y pulsa **Descargar seleccionados · ZIP**: se incluye la versión activa de cada vídeo. La resolución **Original** la conserva sin recomprimir. Los borradores se excluyen y los nombres llevan un índice para evitar colisiones. El ZIP admite hasta 4 GB; para más material, descarga por grupos.
+## Qué incluye
 
-**Descargar clips** permite elegir seleccionados, favoritos o todos los disponibles. Puedes usar los nombres de los clips, un nombre común numerado o personalizar cada archivo. La vista previa muestra los nombres seguros definitivos y resuelve duplicados. Los prompts, ajustes, duración y origen se incluyen opcionalmente en `clips.json`. Los descartados se excluyen de Favoritos y Todos; puedes seleccionarlos explícitamente si quieres descargarlos.
+- **Proyectos vacíos:** crea clips cuando los necesites, sin plantillas ni tomas automáticas.
+- **Generación con Google:** integración con Gemini Omni 1.1 Flash y Veo 3.1, referencias visuales y generación de imágenes de referencia.
+- **Cola persistente:** solicita de 1 a 20 clips independientes, sigue preparando otros y recupera operaciones tras recargar.
+- **Biblioteca de clips:** búsqueda, filtros, favoritos, descartados, papelera, comparación y reutilización de ajustes.
+- **Edición y extensión con Omni:** crea clips derivados y conserva el original.
+- **Editor de secuencia:** arrastra, ordena, recorta ambos extremos, divide, duplica, ajusta audio, deshaz y previsualiza el resultado.
+- **Revisión precisa:** vista ampliada, miniaturas, bucle de una toma, navegación entre cortes y atajos de teclado.
+- **Descargas:** originales, ZIP con metadatos opcionales y MP4 del montaje; resoluciones de descarga de 720p, 1080p y 4K mediante escalado local.
 
-**Resolución de descarga** funciona desde las tarjetas, el editor, Mis vídeos y el ZIP. La vista individual muestra las dimensiones reales antes y después del cambio. 720p, 1080p y 4K conservan la proporción vertical u horizontal. El nombre añade la resolución; los ajustes de generación del manifiesto permanecen separados de los datos de descarga. Si el archivo ya tiene las dimensiones solicitadas, se entrega sin recomprimir.
+## Empezar en local
 
-El escalado usa [Lanczos de FFmpeg](https://ffmpeg.org/ffmpeg-scaler.html) con H.264 CRF 18 y preset `veryfast`. Se ejecuta en este dispositivo, sin enviar los vídeos a un servicio ni consumir cuota de Google. Conserva el audio por copia, la duración y la velocidad de los clips individuales. Es interpolación, no restauración con IA: aumenta la resolución sin recuperar detalle perdido. 1080p ofrece un equilibrio práctico; 4K puede tardar varios minutos y consumir mucha memoria. El motor se carga bajo demanda, muestra progreso y permite cancelar; mantén la pestaña abierta. Los ZIP procesan un clip cada vez. Archivos individuales mayores de 512 MB y salidas mayores de 8,3 megapíxeles requieren un editor local. Las secuencias se codifican directamente en la resolución elegida, con audio normalizado y 24 fps como antes.
-
-La alternativa de restauración [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) requiere otro entorno de ejecución (Python, un binario nativo o un servicio externo); no se incluye en el despliegue estático. [ffmpeg.wasm es más lento que FFmpeg nativo](https://ffmpegwasm.netlify.app/docs/faq/), por lo que para trabajo largo en 4K conviene el editor local.
-
-Selecciona exactamente dos clips con vídeo y pulsa **Comparar 2 clips**. Ambos comparten reproducción y desplazamiento; puedes escuchar uno a la vez y marcar el favorito sin salir. Si las duraciones difieren, el más corto conserva su último fotograma mientras continúa el otro.
-
-**Montar secuencia** abre un editor con biblioteca, previsualización y línea de tiempo. Añade vídeos con **+** o arrástralos desde la biblioteca; puedes usar un mismo vídeo varias veces. Arrastra las tomas para ordenarlas, o usa **Antes / Después**. Recorta ambos bordes en la línea de tiempo o introduce los segundos de inicio y final. **Dividir aquí** corta en la posición del cursor; **Duplicar**, **Quitar**, **Deshacer** y **Rehacer** permiten probar montajes sin tocar los originales.
-
-El cursor, la regla y el control bajo la previsualización recorren la secuencia sin tener que exportarla. La reproducción pasa entre tomas y respeta sus recortes y volumen; el siguiente clip se precarga. **Espacio** reproduce/pausa, **← / →** avanzan un fotograma (24 fps), **Mayús + flecha** avanza un segundo y **S** divide. También puedes ajustar el zoom y elegir formato vertical u horizontal; las imágenes se encajan completas con bandas cuando su proporción difiere.
-
-**Ampliar editor** aprovecha la ventana completa y se cierra con **Esc**. La línea de tiempo muestra miniaturas representativas del vídeo, reutilizadas entre tomas y cargadas al acercarse a la zona visible. Una marca indica el punto de inserción al arrastrar: suelta en la mitad izquierda o derecha de una toma para colocar el clip antes o después. Puedes previsualizar cada vídeo desde la biblioteca antes de añadirlo.
-
-**Empezar aquí (I)** y **Terminar aquí (O)** recortan la toma seleccionada en la posición del cursor. Los botones de corte anterior/siguiente permiten revisar las uniones. **Repetir toma seleccionada** reproduce en bucle esa toma para afinarla; es un control de revisión y no añade repeticiones a la exportación. Seleccionar la toma que ya estás viendo conserva el cursor. Un arrastre del volumen se deshace en un único paso. El botón de teclado muestra los atajos. En móvil, la línea de tiempo sigue a la previsualización y los paneles **Clips del proyecto / Ajustar toma** comparten el espacio inferior.
-
-Los cambios se guardan automáticamente en este navegador, incluyendo recortes, repeticiones, audio y versión de origen. **Exportar vídeo** aplica esos mismos ajustes al MP4, incluso con una sola toma recortada. Los proyectos anteriores conservan su orden al abrirse. Es un montaje de una pista con cortes directos; las transiciones, los títulos y las pistas de música independientes quedan para el editor local.
-
-En el modal, escribe el prompt y ajusta la salida; las referencias son opcionales y se despliegan cuando las necesitas. Las instrucciones de edición y extensión también se guardan. Puedes preparar otro clip mientras se genera uno y volver desde Ajustes al clip abierto. En móvil, alterna entre **Configurar** y **Vista previa**. En la biblioteca puedes ordenar, filtrar los clips **Por revisar** y recuperar resultados pendientes directamente.
-
-**Cantidad de clips** indica cuántos vídeos crear. Cada resultado aparece en una tarjeta independiente, listo para seleccionar, descargar, eliminar o añadir al montaje. Al aceptarlos, el modal se cierra y la biblioteca muestra el estado de Google y los clips pendientes. Cada solicitud conserva el prompt, los ajustes y las referencias enviados aunque después cambies el borrador.
-
-**Editar** crea un clip nuevo con los cambios; **Extender** crea otro que incluye el vídeo original y 10 segundos de continuación. El clip de origen se conserva y los resultados tienen un enlace **Ver origen**. Si solicitas varios, todos parten de la misma toma seleccionada. Puedes extender de nuevo el resultado cuando quieras continuar desde él.
-
-Los resultados guardados con el flujo anterior siguen disponibles en **Resultados anteriores**. **Separar en clips** conserva la toma activa en su tarjeta y convierte las demás en clips independientes, sin volver a generar ni perder archivos.
-
-La cola procesa una solicitud cada vez y puedes añadir otras mientras trabaja. **Cancelar pendientes** retira las solicitudes que todavía no han empezado de ese clip. **Pausar seguimiento** detiene el seguimiento local y la cola, sin cancelar la operación que Google ya recibió. Mantén la pestaña abierta para que siga avanzando. Tras recargar, las solicitudes pendientes se conservan pausadas: usa **Recuperar resultado** si hay una operación interrumpida o **Continuar cola** para las que aún no se enviaron. Un error detiene la cola y conserva lo restante. **Reintentar clip** utiliza la solicitud guardada en esa misma tarjeta, incluyendo el vídeo base de una edición o extensión.
-
-La cola no añade pasos al generar. **Ver actividad** abre un panel opcional con el clip activo y los próximos. La flecha adelanta un clip al siguiente turno; puedes cancelar una solicitud o los pendientes de una tanda completa. Las prioridades y cancelaciones se conservan al recargar. La solicitud en curso permanece intacta. El panel también muestra resultados por recuperar.
-
-## Inicio local
-
-Requiere Node.js 22.12+ y un navegador moderno.
+Requiere **Node.js 22.12 o posterior** y npm. Un navegador de escritorio Chromium reciente es la referencia de las pruebas automatizadas.
 
 ```bash
+git clone https://github.com/davidgalarza/Video_Orchestrator.git
+cd Video_Orchestrator
 npm ci
 npm run dev
 ```
 
-Abre http://localhost:5173. En **Ajustes**, pega tu clave de Google y pulsa **Guardar clave**. No requiere `.env`, credenciales de servicio, una base de datos externa ni un backend.
+Abre la dirección que muestra Vite, normalmente [localhost:5173](http://localhost:5173). Crea un proyecto y pulsa **Nuevo clip**. Para generar, introduce tu clave personal en **Ajustes**.
 
-**Comprobar conexión** consulta el catálogo de Google sin generar contenido. Confirma que Google acepta la clave, pero no garantiza permiso o cuota para un modelo concreto. La primera generación comprueba ese acceso. Necesitas una clave de la API oficial de Google, no una clave de un intermediario.
+No necesitas `.env`, una cuenta de servicio, una base de datos externa ni un backend. **No incluyas una API key en el repositorio ni en variables `VITE_*` del despliegue.**
+
+El acceso a los modelos y sus costes dependen de Google y de tu cuenta. Una clave válida no garantiza permisos o cuota para un modelo. Los identificadores y restricciones implementados están documentados en [integración con Google](docs/google-api.md); las pruebas simuladas no certifican disponibilidad real del servicio.
 
 ## Desplegar en Vercel
 
-1. Importa tu fork de este repositorio en Vercel.
-2. Selecciona **Vite**, con `npm run build` y directorio de salida `dist`.
-3. Despliega y abre la URL. Introduce tu clave dentro de **Ajustes**.
+Importa tu fork, selecciona **Vite**, usa `npm run build` y publica `dist`. El archivo [vercel.json](vercel.json) incluye los encabezados que necesita el motor de vídeo. Cada usuario introduce su propia clave después de abrir la aplicación.
 
-El archivo `vercel.json` ya contiene la configuración y los encabezados para la exportación de vídeo. No añadas una clave compartida mediante `VITE_*`: esas variables se incluyen en los archivos públicos. Cada navegador utiliza la clave que su usuario introduce.
+Consulta la [guía de despliegue](docs/deployment.md) para instalación, comprobaciones y otros alojamientos estáticos.
 
-Vercel sirve archivos estáticos. Las generaciones y su seguimiento se realizan entre el navegador y Google; no dependen de los tiempos máximos de una función serverless. El motor FFmpeg se carga bajo demanda desde el mismo despliegue, sin un CDN externo.
+## Qué debes saber
 
-## Datos, recuperación y límites
+- **Almacenamiento local:** no hay sincronización, cuentas ni copia de seguridad de proyectos. Cambiar de navegador, dominio o puerto cambia el almacenamiento accesible. Descargar un ZIP no crea un proyecto reimportable.
+- **Generación remota:** los prompts y referencias enviados se procesan en Google. Pausar el seguimiento no cancela necesariamente su procesamiento o facturación.
+- **Montaje de una pista:** cortes directos, sin títulos, transiciones ni pistas de música independientes. No incluye importación general de vídeos externos como clips.
+- **Escalado convencional:** Lanczos aumenta las dimensiones; no reconstruye detalle mediante IA.
+- **Recursos del dispositivo:** la exportación necesita memoria, CPU y aislamiento entre orígenes. Mantén abierta la pestaña. Para montajes grandes, descarga los originales y usa un editor local.
 
-- Los proyectos, imágenes y vídeos se guardan en IndexedDB. No se sincronizan entre dispositivos. Descarga los vídeos importantes antes de borrar los datos del navegador.
-- La papelera conserva los archivos para poder restaurarlos; mover un clip a ella no libera espacio. Eliminar el proyecto elimina también sus clips de la papelera.
-- Se conserva el nombre y esquema de la base de datos del proyecto original. Sus vídeos se leen desde el blob almacenado, creando URLs nuevas al reproducirlos.
-- Cada iteración conserva las versiones anteriores. Pausar detiene el seguimiento local; Google puede continuar procesando y facturando la solicitud.
-- Omni se lee desde `steps → model_output → content` en REST; `output_video` es una comodidad del SDK. Se admiten vídeos en base64 y por URI, esperando a que el archivo esté `ACTIVE` antes de descargarlo.
-- Si ya se recibió el identificador de una operación, **Recuperar resultado** solo consulta y descarga. Si la conexión falla antes de recibirlo, revisa tu actividad de Google antes de crear otra generación: no es posible garantizar que el servidor no haya aceptado la primera.
-- El contexto de Omni para edición y extensión caduca según la retención de Google. Los vídeos descargados al navegador permanecen disponibles aunque caduque ese contexto.
-- Omni permite elegir 360p/720p y salidas reescaladas de 1080p/4K. La extensión solicitada añade 10 segundos, hasta un total de 40; su resultado depende del modelo.
-- La exportación de varias escenas normaliza a **720p, H.264/AAC, 24 fps**, conservando el encuadre mediante bandas cuando los formatos difieren. Los clips individuales se descargan con su calidad original. La guía de zona segura es solo una ayuda visual y no se incrusta en el archivo.
-- La exportación usa memoria y CPU de tu dispositivo; funciona mejor en escritorio. El motor se descarga una vez (aproximadamente 32 MB sin comprimir). Puedes descargar clips por separado en dispositivos con pocos recursos.
-- No se muestran costes ficticios ni se estiman cargos: consulta el consumo real en Google AI Studio.
+Más detalles en [privacidad y datos](docs/privacy.md) y [problemas frecuentes](docs/troubleshooting.md).
 
-## Desarrollo y validación
+## Documentación
+
+| Necesito…                              | Guía                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------ |
+| Usar clips, referencias, cola y editor | [Guía de uso](docs/usage.md)                                             |
+| Instalar o desplegar                   | [Despliegue](docs/deployment.md)                                         |
+| Entender los modelos y la recuperación | [API de Google](docs/google-api.md)                                      |
+| Saber qué se almacena o transmite      | [Privacidad](docs/privacy.md)                                            |
+| Modificar el código                    | [Arquitectura](docs/architecture.md) y [desarrollo](docs/development.md) |
+| Reportar un fallo o colaborar          | [Contribución](CONTRIBUTING.md) y [seguridad](SECURITY.md)               |
+| Preparar una publicación               | [Guía de publicación](docs/releasing.md) y [cambios](CHANGELOG.md)       |
+
+## Validación
 
 ```bash
-npm run test       # contratos HTTP, recuperación, referencias y almacenamiento
+npm test
 npm run lint
 npm run build
-npm run dev        # mantener activo para las pruebas de navegador
-npm run test:e2e   # flujo completo y exportación real con clips sintéticos
 ```
 
-Las pruebas de generación interceptan Google con respuestas simuladas y no consumen cuota. La exportación sí ejecuta FFmpeg real en el navegador. La comprobación con una clave real y acceso a Omni es un paso independiente; las pruebas simuladas no certifican disponibilidad, facturación, CORS o comportamiento real del proveedor.
+Las pruebas de navegador usan respuestas de Google simuladas y vídeos sintéticos; la exportación ejecuta FFmpeg real. Para ejecutarlas, sigue [desarrollo y pruebas](docs/development.md). No requieren claves reales.
 
-Si Chrome no está instalado en macOS, instala Chromium con `npx playwright install chromium`. Puedes indicar un ejecutable mediante `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
+## Licencia y créditos
 
-## Fuentes técnicas
+El código de la aplicación conserva la [licencia MIT original](LICENSE), con copyright de Rajjit Laishram. Las mejoras de este fork se registran en [CHANGELOG.md](CHANGELOG.md) y en el historial de Git.
 
-- [Omni: generación, referencias, edición y extensión](https://ai.google.dev/gemini-api/docs/omni)
-- [Contrato de Interactions API](https://ai.google.dev/api/interactions-api)
-- [Veo: contrato de generación](https://ai.google.dev/gemini-api/docs/veo)
-
-## Licencias
-
-La aplicación conserva la licencia MIT y la atribución del proyecto original en [LICENSE](./LICENSE). La distribución de FFmpeg incluida tiene su propia licencia GPL-2.0-or-later; consulta [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
-
-### Errores al procesar archivos de Google
-
-Las generaciones nuevas en 360p y 720p usan entrega directa; 1080p, 4K y edición/extensión conservan entrega por URI para salidas grandes, siguiendo la [guía de Omni](https://ai.google.dev/gemini-api/docs/omni#retrieving-videos-with-an-uri). Si Google falla al preparar el archivo de salida, la app intenta recuperar datos del mismo resultado una sola vez mediante GET, sin repetir la generación. Un fallo terminal confirmado permite un reintento explícito; las interrupciones de red conservan la opción de recuperar. Un fallo de Google no garantiza que exista un vídeo recuperable.
-
-Antes de enviar referencias, la app prepara copias JPEG con orientación aplicada, fondo blanco para transparencias y un máximo de 2048 px por lado. Las imágenes originales y las solicitudes guardadas se conservan. Esta preparación mejora la compatibilidad de entrada, pero no corrige un fallo del servicio de archivos de salida de Google.
+El núcleo FFmpeg distribuido con la aplicación tiene licencia **GPL-2.0-or-later**, independiente de la licencia declarada para el código de la aplicación. Consulta [avisos de terceros](THIRD_PARTY_NOTICES.md), el [texto incluido](public/licenses/FFmpeg-GPL-2.0.txt) y la documentación de sus componentes antes de redistribuir binarios.

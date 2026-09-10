@@ -7,19 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Nothing yet
+Cambios del fork Vidgen Studio posteriores a la versión heredada. No representan una nueva release numerada publicada.
+
+### Añadido
+
+- Integración REST de Omni, edición/extensión como clips derivados, referencias normalizadas y recuperación de resultados.
+- Biblioteca de clips, favoritos, descartados, comparación, reutilización y papelera restaurable.
+- Cola persistida con múltiples salidas independientes, pausa, prioridades y cancelación de pendientes.
+- Selector visual de referencias, carga por arrastre y previsualización.
+- Descargas originales, ZIP con metadatos opcionales y escalado local a 720p/1080p/4K.
+- Editor de secuencia no destructivo: recortes, divisiones, duplicados, audio, deshacer/rehacer y previsualización.
+- Vista ampliada, miniaturas reutilizadas, recorte desde el cursor, bucle de revisión y paneles móviles.
+- Pruebas de contratos, persistencia, línea de tiempo y navegador con exportaciones reales de medios sintéticos.
+- Guías de uso, arquitectura, despliegue, privacidad, desarrollo, seguridad y publicación; plantillas de colaboración y resumen en inglés.
+
+### Cambiado
+
+- Los proyectos nuevos empiezan vacíos y los clips se crean por acción del usuario.
+- Interfaz en español y de uso general, sin plantillas ni posicionamiento exclusivo para redes sociales.
+- Las solicitudes guardan su entrada antes de pasar a la cola; la recuperación no repite automáticamente una generación.
+- Los montajes conservan versión de origen, recortes, volumen y ocurrencias repetidas, compatibles con el orden antiguo.
+
+### Corregido
+
+- Tratamiento de fallos terminales de archivos de Google y reintento explícito.
+- Normalización de referencias y lectura de resultados con base64 o URI.
+- Exportación con fuentes silenciosas, recortes de una sola toma y formatos mezclados.
+
+## Historial heredado
+
+Las notas siguientes se conservan del proyecto original como registro histórico. Sus rutas, dependencias y funciones describen aquel estado, no la implementación actual del fork.
 
 ## [1.0.0] - 2026-05-04
 
 ### Added
 
 #### Core Architecture
+
 - Browser-native application - runs entirely in the browser without backend
 - IndexedDB storage layer via `idb` library for projects, scenes, and assets
 - localStorage for user settings and API key management
 - Direct Google GenAI SDK (`@google/genai`) integration for API calls
 
 #### Video Features
+
 - Video generation using Google Veo 3.1 (`veo-3.1-generate-preview`)
 - Frame-to-frame continuity with first frame image support
 - In-browser video stitching via ffmpeg.wasm (`@ffmpeg/ffmpeg`, `@ffmpeg/util`)
@@ -27,11 +58,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time generation progress tracking
 
 #### Image Features
+
 - AI image generation using Gemini (`gemini-3.1-flash-image-preview`)
 - Asset upload and management (Character, Product, Style types)
 - Project asset linking/unlinking
 
 #### UI/UX
+
 - React 19 + TypeScript 5 + Vite build system
 - Tailwind CSS v4 with dark theme
 - Responsive sidebar navigation
@@ -43,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Notification system for user feedback
 
 #### Documentation
+
 - MIT License (Copyright 2026 Rajjit Laishram)
 - Comprehensive README with setup instructions
 - Contributing guidelines
@@ -51,6 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Dependencies
 
 #### Production
+
 - `@ffmpeg/ffmpeg@^0.12.15` - WebAssembly video processing
 - `@ffmpeg/util@^0.12.2` - FFmpeg utilities
 - `@google/genai@^0.8.0` - Google AI SDK
@@ -64,6 +99,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tailwindcss@^4.2.4` - CSS framework
 
 #### Development
+
 - `@eslint/js@^10.0.1` - ESLint core
 - `@types/node@^24.12.2` - Node.js types
 - `@types/react@^19.2.14` - React types
@@ -78,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `vite@^8.0.10` - Build tool
 
 ### Changed
+
 - Migrated from Python/FastAPI backend to pure browser-based application
 - Moved all source code from `frontend/` directory to project root
 - Updated all documentation for new architecture
@@ -85,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replaced Python FFmpeg with ffmpeg.wasm
 
 ### Removed
+
 - Python backend (FastAPI, SQLAlchemy, SQLite, python-multipart)
 - Server-side video processing pipeline
 - Environment file configuration (`.env`, `.env.example`)
@@ -101,6 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Python Backend Era (Archived)
 
 The project originally used a Python/FastAPI backend with:
+
 - FastAPI + SQLAlchemy + SQLite
 - Server-side video processing
 - Google Cloud Storage for assets

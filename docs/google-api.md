@@ -1,0 +1,45 @@
+# Integración con Google
+
+[Documentación](README.md)
+
+Esta guía describe lo que **implementa el repositorio**, no una garantía de disponibilidad o condiciones comerciales de Google. Los contratos pueden cambiar y el acceso depende de la cuenta. La autoridad local es `src/types.ts` y `src/lib/google.ts`.
+
+## Modelos y límites implementados
+
+| Uso                   | Identificador enviado      | Opciones admitidas por la aplicación                                    |
+| --------------------- | -------------------------- | ----------------------------------------------------------------------- |
+| Vídeo Omni            | `gemini-omni-1.1-flash`    | Generación de 3–10 segundos, enteros; 9:16/16:9; 360p, 720p, 1080p y 4k |
+| Vídeo Veo             | `veo-3.1-generate-preview` | 4, 6 u 8 segundos en 720p; 8 segundos en 1080p; 9:16/16:9               |
+| Referencias generadas | `gemini-3.1-flash-image`   | Solicitud de imagen y texto con proporción de imagen                    |
+
+Las guías de personaje/objeto/estilo y la edición/extensión de vídeo utilizan Omni en esta interfaz. Veo admite fotogramas inicial y final; un final requiere un inicial. Omni también requiere ese orden y la UI limita las guías visuales a tres.
+
+## Solicitudes
+
+La aplicación llama mediante `fetch` a `https://generativelanguage.googleapis.com/v1beta`. No depende de un SDK de Google ni de un proxy propio. Las solicitudes oficiales se autentican con `x-goog-api-key`.
+
+Omni usa `/interactions`, `background: true`, `store: true` y `response_format` de vídeo. La edición y extensión envían `previous_interaction_id`; necesitan el contexto remoto de un resultado Omni anterior. La extensión solicita 10 segundos adicionales y la aplicación limita el total declarado a 40 segundos. El contenido y la duración reales dependen de la respuesta del proveedor.
+
+Las generaciones Omni en 360p/720p omiten la entrega por URI. Las de 1080p/4k y las ediciones/extensiones solicitan `delivery: "uri"`. El lector acepta distintas formas de salida, incluyendo contenido de vídeo en los pasos de la interacción, base64 y URI. Veo usa operaciones de generación de larga duración. Consulta el código y las pruebas de contrato al modificar estas rutas.
+
+Antes de enviar referencias, `prepareReferenceImages` crea copias JPEG RGB, reduce la dimensión máxima a 2048 px, rellena transparencias con blanco y verifica un máximo de 4 MB por copia. No modifica las imágenes originales ni la captura persistida de la solicitud.
+
+## Seguimiento y recuperación
+
+- Se guarda el ID remoto tan pronto como está disponible.
+- Pausar interrumpe el seguimiento local; no garantiza cancelar el trabajo remoto.
+- Recuperar con un ID conocido hace consultas y descarga del resultado existente.
+- Si el archivo está `PROCESSING`, se sigue consultando; solo se descarga desde Files cuando está `ACTIVE`.
+- Un `FAILED` de archivo se trata como fallo de salida. La app puede intentar una recuperación directa acotada del mismo resultado mediante GET; no repite automáticamente el POST de generación.
+- Tras un fallo terminal, **Reintentar clip** es una acción explícita que puede generar una nueva solicitud y un nuevo cargo.
+- Sin ID remoto, una caída de red deja incierto si Google aceptó el POST. No hay garantía de generación exactamente una vez en ese caso.
+
+Las URI de descarga deben usar HTTPS y dominios Google permitidos por el código. Las URL firmadas de almacenamiento no reciben la API key del usuario. No amplíes esa lista ni reenvíes credenciales a otro origen sin revisar el flujo.
+
+## Pruebas y cambios del proveedor
+
+**Comprobar conexión** consulta el catálogo de modelos; no genera contenido ni certifica acceso a uno concreto. Las pruebas automatizadas interceptan la red. Para validar un cambio real de contrato hace falta una comprobación separada con acceso al modelo y conocimiento del coste; no publiques su clave ni referencias privadas.
+
+Al cambiar un modelo, actualiza tipos, validación, construcción y lectura de respuestas, UI, casos de error y pruebas. No sustituyas un modelo silenciosamente ni conviertas la recuperación en una segunda generación.
+
+Los términos, precios, permisos, conservación de datos y disponibilidad se consultan directamente en Google. El repositorio no proporciona créditos de generación ni garantiza acceso por tener una clave.
