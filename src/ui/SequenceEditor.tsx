@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import {
+  Maximize2,
+  Minimize2,
+  Repeat2,
+  ChevronLeft,
+  ChevronRight,
+  Keyboard,
+  X,
   ArrowLeft,
   ArrowRight,
   Copy,
@@ -38,6 +45,8 @@ import type { WorkspaceController } from "../lib/useWorkspace";
 import { useBlobUrl } from "../lib/useBlobUrl";
 import { Clip } from "./common";
 import { VideoDownloadDialog, type VideoDownload } from "./VideoDownloadDialog";
+import { SequenceFilmstrip } from "./SequenceFilmstrip";
+import { StudioDialog } from "./StudioDialog";
 import "./sequence.css";
 
 type Edit = { items: SequenceItem[]; aspect: AspectRatio };
@@ -172,6 +181,35 @@ export function SequenceEditor({
     items: projectSequence(project, scenes),
     aspect: project.sequence_aspect || "9:16",
   }));
+  const root = useRef<HTMLElement>(null);
+  const [focus, setFocus] = useState(false);
+  const [panel, setPanel] = useState<"library" | "inspector">("library");
+  const [loop, setLoop] = useState("");
+  const [help, setHelp] = useState(false);
+  const [audition, setAudition] = useState<Scene>();
+  const [dropTarget, setDropTarget] = useState<string>();
+  const volumeGesture = useRef<SequenceItem[] | null>(null);
+  useEffect(() => {
+    if (!focus) return;
+    const before = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const outside: { element: HTMLElement; inert: boolean }[] = [];
+    let element: HTMLElement | null = root.current;
+    while (element && element !== document.body) {
+      for (const sibling of element.parentElement?.children || [])
+        if (sibling !== element && sibling instanceof HTMLElement) {
+          outside.push({ element: sibling, inert: sibling.inert });
+          sibling.inert = true;
+        }
+      element = element.parentElement;
+    }
+    return () => {
+      document.body.style.overflow = before;
+      outside.forEach((item) => {
+        item.element.inert = item.inert;
+      });
+    };
+  }, [focus]);
   const [draft, setDraft] = useState<SequenceItem[]>();
   const [past, setPast] = useState<Edit[]>([]),
     [future, setFuture] = useState<Edit[]>([]);
@@ -198,6 +236,9 @@ export function SequenceEditor({
     next: SequenceItem[];
   } | null>(null);
   const clips = resolveTimeline(draft || edit.items, scenes, durations);
+  const tickStep =
+    [1, 2, 5, 10, 15, 30, 60, 120, 300].find((step) => step * zoom >= 64) ||
+    300;
   const total = clips.reduce((sum, c) => sum + c.length, 0);
   const time = Math.min(position, total);
   useEffect(() => {
@@ -293,6 +334,8 @@ export function SequenceEditor({
     items.splice(index < 0 ? items.length : index, 0, item);
     update(items);
     setSelected(item.id);
+    setLoop("");
+    setPanel("inspector");
   }
   function move(id: string, before?: string) {
     if (id === before) return;
@@ -322,16 +365,63 @@ export function SequenceEditor({
       edit.items.flatMap((i) => (i.id === chosen.id ? [i, { ...i, id }] : [i])),
     );
     setSelected(id);
+    setLoop("");
   }
   function split() {
     if (current) update(splitSequence(edit.items, current, time));
   }
   function remove() {
-    if (chosen) update(edit.items.filter((i) => i.id !== chosen.id));
+    if (!chosen) return;
+    const next =
+      clips[clips.indexOf(chosen) + 1] || clips[clips.indexOf(chosen) - 1];
+    update(edit.items.filter((i) => i.id !== chosen.id));
+    setSelected(next?.id || "");
+    if (loop === chosen.id) setLoop("");
+  }
+  function jumpCut(direction: number) {
+    const points = [...clips.map((c) => c.start), total];
+    seek(
+      direction > 0
+        ? (points.find((n) => n > time + FRAME / 2) ?? total)
+        : (points.filter((n) => n < time - FRAME / 2).at(-1) ?? 0),
+    );
+  }
+  function trimToCursor(side: "in" | "out") {
+    if (!chosen || current?.id !== chosen.id) return;
+    const value = chosen.in + time - chosen.start;
+    if (value <= chosen.in + FRAME / 2 || value >= chosen.out - FRAME / 2)
+      return;
+    patch(chosen.id, { in: chosen.in, out: chosen.out, [side]: value });
+    seek(
+      side === "in" ? chosen.start : chosen.start + value - chosen.in - FRAME,
+    );
+  }
+  function changeVolume(value: number) {
+    if (!chosen) return;
+    const items = edit.items.map((i) =>
+      i.id === chosen.id ? { ...i, volume: value } : i,
+    );
+    if (volumeGesture.current) {
+      volumeGesture.current = items;
+      setDraft(items);
+    } else update(items);
+  }
+  function finishVolume() {
+    const items = volumeGesture.current;
+    volumeGesture.current = null;
+    setDraft(undefined);
+    if (items) update(items);
   }
   function togglePlay() {
     if (!clips.length || unresolved) return;
-    if (time >= total - FRAME) seek(0);
+    const repeated = clips.find((c) => c.id === loop);
+    if (
+      repeated &&
+      (time < repeated.start ||
+        time >= repeated.start + repeated.length - FRAME)
+    )
+      seek(repeated.start);
+    else if (time >= total - FRAME) seek(0);
     setError("");
     setPlaying(!playing);
   }
@@ -340,6 +430,10 @@ export function SequenceEditor({
   useEffect(() => {
     handlers.current = {
       end: () => {
+        if (current && loop === current.id) {
+          seek(current.start);
+          return;
+        }
         const next = clips[currentIndex + 1];
         if (next) seek(next.start);
         else {
@@ -359,6 +453,13 @@ export function SequenceEditor({
   const [onError] = useState(() => () => handlers.current.fail());
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector("dialog[open]")) {
+        setFocus(false);
+        drag.current = null;
+        volumeGesture.current = null;
+        setDraft(undefined);
+        return;
+      }
       if (
         e.target instanceof HTMLElement &&
         (e.target.closest(
@@ -373,7 +474,13 @@ export function SequenceEditor({
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
-      } else if (e.code === "Space") {
+      } else if (e.metaKey || e.ctrlKey || e.altKey) return;
+      else if (e.key === "?") {
+        e.preventDefault();
+        setHelp(true);
+      } else if (e.key.toLowerCase() === "i") trimToCursor("in");
+      else if (e.key.toLowerCase() === "o") trimToCursor("out");
+      else if (e.code === "Space") {
         e.preventDefault();
         togglePlay();
       } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -400,6 +507,8 @@ export function SequenceEditor({
     e.preventDefault();
     setPlaying(false);
     setSelected(clip.id);
+    setPanel("inspector");
+    seek(side === "in" ? clip.start : clip.start + clip.length - FRAME);
     e.currentTarget.setPointerCapture(e.pointerId);
     drag.current = {
       id: clip.id,
@@ -427,6 +536,10 @@ export function SequenceEditor({
         : i,
     );
     setDraft(d.next);
+    const edge =
+      d.side === "in" ? d.clip.start : d.clip.start + value - d.clip.in - FRAME;
+    setPosition(Math.max(0, edge));
+    setSeekToken((n) => n + 1);
   }
   function trimEnd() {
     const d = drag.current;
@@ -447,7 +560,13 @@ export function SequenceEditor({
     onBack();
   }
   return (
-    <section className="sequence-editor" aria-label="Editor de secuencia">
+    <section
+      ref={root}
+      className={`sequence-editor ${focus ? "sequence-focused" : ""}`}
+      data-panel={panel}
+      aria-label="Editor de secuencia"
+      onDragEnd={() => setDropTarget(undefined)}
+    >
       {probes.map((c) => (
         <SourceProbe
           key={sourceKey(c)}
@@ -475,6 +594,26 @@ export function SequenceEditor({
           )}
         </div>
         <button
+          className="icon-button"
+          aria-label="Atajos del editor"
+          title="Atajos del editor (?)"
+          onClick={() => {
+            setPlaying(false);
+            setHelp(true);
+          }}
+        >
+          <Keyboard size={18} />
+        </button>
+        <button
+          className="icon-button"
+          aria-label={focus ? "Salir de vista ampliada" : "Ampliar editor"}
+          aria-pressed={focus}
+          title={focus ? "Salir de vista ampliada (Esc)" : "Ampliar editor"}
+          onClick={() => setFocus(!focus)}
+        >
+          {focus ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+        </button>
+        <button
           className="button primary"
           disabled={!clips.length || unresolved}
           onClick={() => {
@@ -495,6 +634,20 @@ export function SequenceEditor({
           <Download size={16} /> Exportar vídeo
         </button>
       </header>
+      <nav className="sequence-mobile-panels" aria-label="Paneles del montaje">
+        <button
+          aria-pressed={panel === "library"}
+          onClick={() => setPanel("library")}
+        >
+          Clips del proyecto <span>{ready.length}</span>
+        </button>
+        <button
+          aria-pressed={panel === "inspector"}
+          onClick={() => setPanel("inspector")}
+        >
+          Ajustar toma
+        </button>
+      </nav>
       <div className="sequence-workbench">
         <aside className="sequence-library">
           <div className="sequence-panel-title">
@@ -526,7 +679,17 @@ export function SequenceEditor({
                     e.dataTransfer.effectAllowed = "copy";
                   }}
                 >
-                  <Clip blob={sceneBlob(s)} controls={false} />
+                  <button
+                    className="sequence-audition"
+                    aria-label={`Previsualizar ${s.title || "clip"}`}
+                    onClick={() => {
+                      setPlaying(false);
+                      setAudition(s);
+                    }}
+                  >
+                    <Clip blob={sceneBlob(s)} controls={false} />
+                    <Play size={16} />
+                  </button>
                   <div>
                     <strong>{s.title || `Clip ${s.order + 1}`}</strong>
                     <small>
@@ -554,7 +717,11 @@ export function SequenceEditor({
         </aside>
         <main className="sequence-viewer">
           <div className="sequence-viewer-heading">
-            <span>Previsualización</span>
+            <span>
+              {current
+                ? `Toma ${currentIndex + 1} de ${clips.length} · ${current.scene?.title || "Clip"}`
+                : "Previsualización"}
+            </span>
             <select
               aria-label="Formato del montaje"
               value={edit.aspect}
@@ -619,6 +786,37 @@ export function SequenceEditor({
             >
               {playing ? <Pause size={20} /> : <Play size={20} />}
             </button>
+            <button
+              className="icon-button"
+              aria-label="Corte anterior"
+              title="Corte anterior"
+              disabled={!clips.length}
+              onClick={() => jumpCut(-1)}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Corte siguiente"
+              title="Corte siguiente"
+              disabled={!clips.length}
+              onClick={() => jumpCut(1)}
+            >
+              <ChevronRight size={18} />
+            </button>
+            <button
+              className="icon-button"
+              aria-label="Repetir toma seleccionada"
+              aria-pressed={!!loop}
+              title="Repetir toma seleccionada"
+              disabled={!chosen}
+              onClick={() => {
+                setLoop(loop ? "" : chosen!.id);
+                if (!loop) seek(chosen!.start);
+              }}
+            >
+              <Repeat2 size={18} />
+            </button>
             <output aria-label="Posición del montaje">
               {timecode(time)} <span>/ {timecode(total)}</span>
             </output>
@@ -649,6 +847,32 @@ export function SequenceEditor({
           {chosen ? (
             <>
               <p className="hint">Recorta la toma sin cambiar el original.</p>
+              <div className="sequence-cursor-trim">
+                <button
+                  className="text-button"
+                  disabled={
+                    !chosen ||
+                    current?.id !== chosen.id ||
+                    time <= chosen.start + FRAME / 2 ||
+                    time >= chosen.start + chosen.length - FRAME / 2
+                  }
+                  onClick={() => trimToCursor("in")}
+                >
+                  Empezar aquí <kbd>I</kbd>
+                </button>
+                <button
+                  className="text-button"
+                  disabled={
+                    !chosen ||
+                    current?.id !== chosen.id ||
+                    time <= chosen.start + FRAME / 2 ||
+                    time >= chosen.start + chosen.length - FRAME / 2
+                  }
+                  onClick={() => trimToCursor("out")}
+                >
+                  Terminar aquí <kbd>O</kbd>
+                </button>
+              </div>
               <div className="sequence-trim-fields">
                 {(["in", "out"] as const).map((side) => (
                   <label key={`${chosen.id}-${side}-${chosen[side]}`}>
@@ -713,9 +937,14 @@ export function SequenceEditor({
                   min={0}
                   max={100}
                   value={chosen.volume * 100}
-                  onChange={(e) =>
-                    patch(chosen.id, { volume: Number(e.target.value) / 100 })
-                  }
+                  onPointerDown={(e) => {
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    volumeGesture.current = edit.items;
+                  }}
+                  onPointerUp={finishVolume}
+                  onPointerCancel={finishVolume}
+                  onBlur={finishVolume}
+                  onChange={(e) => changeVolume(Number(e.target.value) / 100)}
                 />
               </label>
               <button
@@ -788,7 +1017,7 @@ export function SequenceEditor({
               <Scissors size={16} /> Dividir aquí
             </button>
           </div>
-          <span>
+          <span className="sequence-montage-count">
             {clips.length} {clips.length === 1 ? "clip" : "clips"} ·{" "}
             {timecode(total)}
           </span>
@@ -850,9 +1079,9 @@ export function SequenceEditor({
               }}
             >
               {Array.from(
-                { length: Math.ceil(total / (zoom < 50 ? 5 : 1)) + 1 },
+                { length: Math.ceil(total / tickStep) + 1 },
                 (_, i) => {
-                  const second = i * (zoom < 50 ? 5 : 1);
+                  const second = i * tickStep;
                   return (
                     <span key={i} style={{ left: second * zoom }}>
                       {timecode(second).slice(0, 5)}
@@ -863,9 +1092,18 @@ export function SequenceEditor({
             </div>
             <div
               className="sequence-lane"
-              onDragOver={(e) => e.preventDefault()}
+              data-drop-end={dropTarget === "end"}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropTarget("end");
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node))
+                  setDropTarget(undefined);
+              }}
               onDrop={(e) => {
                 e.preventDefault();
+                setDropTarget(undefined);
                 const id = e.dataTransfer.getData("application/sequence-item"),
                   scene = scenes.find(
                     (s) =>
@@ -879,7 +1117,7 @@ export function SequenceEditor({
               {clips.map((c, index) => (
                 <div
                   key={c.id}
-                  className={`sequence-item ${selected === c.id ? "selected" : ""} ${!c.blob ? "unavailable" : ""}`}
+                  className={`sequence-item ${selected === c.id ? "selected" : ""} ${current?.id === c.id ? "is-playing" : ""} ${dropTarget === c.id ? "drop-before" : ""} ${!c.blob ? "unavailable" : ""}`}
                   style={{ width: c.length * zoom }}
                   data-testid="timeline-clip"
                   data-clip-id={c.id}
@@ -895,6 +1133,12 @@ export function SequenceEditor({
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    const bounds = e.currentTarget.getBoundingClientRect();
+                    setDropTarget(
+                      e.clientX > bounds.left + bounds.width / 2
+                        ? clips[index + 1]?.id || "end"
+                        : c.id,
+                    );
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
@@ -907,8 +1151,14 @@ export function SequenceEditor({
                           s.id ===
                           e.dataTransfer.getData("application/sequence-source"),
                       );
-                    if (id) move(id, c.id);
-                    else if (scene) add(scene, c.id);
+                    const bounds = e.currentTarget.getBoundingClientRect();
+                    const target =
+                      e.clientX > bounds.left + bounds.width / 2
+                        ? clips[index + 1]?.id
+                        : c.id;
+                    if (id) move(id, target);
+                    else if (scene) add(scene, target);
+                    setDropTarget(undefined);
                   }}
                 >
                   <button
@@ -917,11 +1167,22 @@ export function SequenceEditor({
                     aria-pressed={selected === c.id}
                     onClick={() => {
                       setSelected(c.id);
-                      seek(c.start);
+                      setPanel("inspector");
+                      if (current?.id !== c.id) {
+                        setPlaying(false);
+                        seek(c.start);
+                      }
+                      if (loop && loop !== c.id) setLoop(c.id);
                     }}
                   >
-                    <Clip blob={c.blob} controls={false} />
-                    <span>
+                    <SequenceFilmstrip
+                      blob={c.blob}
+                      start={c.in}
+                      end={c.out}
+                      duration={c.sourceDuration}
+                      width={c.length * zoom}
+                    />
+                    <span className="sequence-item-label">
                       <strong>
                         {index + 1}. {c.scene?.title || "Clip"}
                       </strong>
@@ -931,6 +1192,11 @@ export function SequenceEditor({
                       </small>
                     </span>
                   </button>
+                  {selected === c.id && (
+                    <span className="sequence-trim-readout">
+                      {timecode(c.in)} → {timecode(c.out)}
+                    </span>
+                  )}
                   {(["in", "out"] as const).map((side) => (
                     <button
                       key={side}
@@ -994,6 +1260,58 @@ export function SequenceEditor({
           </p>
         )}
       </section>
+      {help && (
+        <StudioDialog title="Atajos del editor" onClose={() => setHelp(false)}>
+          <div className="sequence-shortcuts">
+            {[
+              ["Espacio", "Reproducir / pausar"],
+              ["← / →", "Un fotograma"],
+              ["Mayús + ← / →", "Un segundo"],
+              ["I / O", "Empezar / terminar en el cursor"],
+              ["S", "Dividir en el cursor"],
+              ["⌘ / Ctrl + Z", "Deshacer"],
+              ["⌘ / Ctrl + Mayús + Z", "Rehacer"],
+              ["Suprimir", "Quitar la toma seleccionada"],
+              ["Esc", "Salir de vista ampliada / cancelar recorte"],
+            ].map(([key, label]) => (
+              <div key={key}>
+                <span>{label}</span>
+                <kbd>{key}</kbd>
+              </div>
+            ))}
+          </div>
+          <p className="hint">
+            Los atajos se aplican al montaje; al escribir en un campo puedes
+            usar los controles habituales.
+          </p>
+        </StudioDialog>
+      )}
+      {audition && (
+        <StudioDialog
+          title={audition.title || "Previsualizar clip"}
+          onClose={() => setAudition(undefined)}
+        >
+          <Clip
+            className="sequence-source-preview"
+            blob={sceneBlob(audition)}
+          />
+          <p className="hint">{audition.prompt}</p>
+          <div className="sequence-audition-actions">
+            <button className="button" onClick={() => setAudition(undefined)}>
+              <X size={16} /> Cerrar
+            </button>
+            <button
+              className="button primary"
+              onClick={() => {
+                add(audition);
+                setAudition(undefined);
+              }}
+            >
+              <Plus size={16} /> Añadir al montaje
+            </button>
+          </div>
+        </StudioDialog>
+      )}
       {download && (
         <VideoDownloadDialog
           video={download}

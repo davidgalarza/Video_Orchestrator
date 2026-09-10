@@ -1953,7 +1953,7 @@ test("timeline trims, splits, reorders, previews cuts and exports the saved mont
   await expect(cards).toHaveCount(2);
   await page.getByRole("button", { name: "Rehacer", exact: true }).click();
   await expect(cards).toHaveCount(3);
-  await cards.last().dragTo(cards.first());
+  await cards.last().dragTo(cards.first(), { targetPosition: { x: 2, y: 40 } });
   await expect(cards.first()).toContainText("Editado");
   await cards.last().locator(".sequence-item-content").click();
   await page.getByRole("button", { name: "Duplicar", exact: true }).click();
@@ -2062,5 +2062,178 @@ test("timeline trims, splits, reorders, previews cuts and exports the saved mont
     .getByRole("button", { name: "Todos los clips", exact: true })
     .click();
   await expect(page.locator(".project-clip")).toHaveCount(2);
+  expect(errors).toEqual([]);
+});
+
+test("refined montage: focus, audition, cursor trims, loop and single-step audio undo", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route(google, (route) => route.abort());
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+  await seedReviewClips(page);
+  await page
+    .getByRole("button", { name: "Montar secuencia", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Previsualizar Original", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").locator("video")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Añadir al montaje", exact: true })
+    .click();
+  await expect(page.getByTestId("timeline-clip")).toHaveCount(1);
+  await expect(page.locator(".sequence-filmstrip img")).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Ampliar editor", exact: true })
+    .click();
+  await expect(page.locator(".sequence-editor")).toHaveClass(
+    /sequence-focused/,
+  );
+  await page.getByLabel("Zoom de la línea de tiempo").fill("240");
+  await expect(page.locator(".sequence-filmstrip img")).toHaveCount(4);
+  await expect(page.locator(".sequence-lane video")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Atajos del editor", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Un fotograma");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".sequence-editor")).toHaveClass(
+    /sequence-focused/,
+  );
+  await page.getByLabel("Recorrer secuencia", { exact: true }).fill("0.25");
+  await page
+    .getByRole("button", { name: "Empezar aquí I", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Inicio del recorte", { exact: true }),
+  ).toHaveValue("0.25");
+  await page.getByLabel("Recorrer secuencia", { exact: true }).fill("0.5");
+  await page
+    .getByRole("button", { name: "Terminar aquí O", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Final del recorte", { exact: true }),
+  ).toHaveValue("0.75");
+  const volume = page.getByLabel("Volumen del clip", { exact: true });
+  const bounds = (await volume.boundingBox())!;
+  await page.mouse.move(
+    bounds.x + bounds.width - 8,
+    bounds.y + bounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    bounds.x + bounds.width * 0.3,
+    bounds.y + bounds.height / 2,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  expect(Number(await volume.inputValue())).toBeLessThan(50);
+  await page.getByRole("button", { name: "Deshacer", exact: true }).click();
+  await expect(volume).toHaveValue("100");
+  await expect(
+    page.getByLabel("Final del recorte", { exact: true }),
+  ).toHaveValue("0.75");
+  await page
+    .getByRole("button", { name: "Repetir toma seleccionada", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Reproducir secuencia", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Pausar secuencia", exact: true }),
+  ).toBeVisible();
+  // Observe more than two full loops without relying on a fixed sleep.
+  let wraps = 0,
+    last = -1;
+  await expect
+    .poll(
+      async () => {
+        const value = Number(
+          await page
+            .getByLabel("Recorrer secuencia", { exact: true })
+            .inputValue(),
+        );
+        if (last > value) wraps++;
+        last = value;
+        return wraps;
+      },
+      { intervals: [70], timeout: 7000 },
+    )
+    .toBeGreaterThanOrEqual(2);
+  await page
+    .getByRole("button", { name: "Pausar secuencia", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Repetir toma seleccionada", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Añadir Editado al montaje", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Volver al inicio", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Corte siguiente", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Recorrer secuencia", { exact: true }),
+  ).toHaveValue("0.5");
+  await page
+    .getByRole("button", { name: "Corte anterior", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Recorrer secuencia", { exact: true }),
+  ).toHaveValue("0");
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("sequence-preview")
+        .evaluate((v: HTMLVideoElement) => !v.seeking && v.readyState >= 2),
+    )
+    .toBe(true);
+  const viewer = (await page.locator(".sequence-viewer").boundingBox())!;
+  const heading = (await page
+    .locator(".sequence-viewer-heading")
+    .boundingBox())!;
+  const slider = (await page.locator(".sequence-seek").boundingBox())!;
+  expect(heading.y).toBeGreaterThanOrEqual(viewer.y);
+  expect(slider.y + slider.height).toBeLessThanOrEqual(
+    viewer.y + viewer.height,
+  );
+  expect(
+    await page
+      .locator(".sequence-filmstrip img")
+      .first()
+      .evaluate((img) => img.getBoundingClientRect().width),
+  ).toBeGreaterThan(10);
+  await page.screenshot({
+    path: "artifacts/sequence-refined-desktop.png",
+    fullPage: true,
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".sequence-editor")).not.toHaveClass(
+    /sequence-focused/,
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "artifacts/sequence-refined-mobile.png",
+    fullPage: true,
+  });
+  const timeline = (await page.locator(".sequence-timeline").boundingBox())!;
+  const inspector = (await page.locator(".sequence-inspector").boundingBox())!;
+  expect(timeline.y).toBeLessThan(inspector.y);
+  await page
+    .getByRole("button", { name: "Clips del proyecto 2", exact: true })
+    .click();
+  await expect(page.locator(".sequence-library")).toBeVisible();
+  await expect(page.locator(".sequence-inspector")).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   expect(errors).toEqual([]);
 });
