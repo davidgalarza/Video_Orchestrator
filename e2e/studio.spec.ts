@@ -13,9 +13,13 @@ async function createProject(page: Page, sceneCount = 1) {
     .getByRole("button", { name: "Nuevo proyecto", exact: true })
     .click();
   await page.getByLabel("Ordenar clips").selectOption("order");
+  await expect(page.locator(".project-clip")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .locator(".editor-top")
+    .getByRole("button", { name: "Nuevo clip", exact: true })
     .click();
+  await page.getByLabel("Nombre de la escena").fill("Primera escena");
   for (let i = 0; i < sceneCount; i++) {
     if (i) {
       await page

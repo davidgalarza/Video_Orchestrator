@@ -62,7 +62,7 @@ export function StudioApp() {
     void w.action(async () => {
       const project = await db.createProject(
         "Proyecto sin título",
-        [{ title: "Primera escena", prompt: "" }],
+        [],
         getDefaults(),
       );
       open(project.id);
