@@ -51,6 +51,14 @@ interface VeoOperation {
     };
   };
 }
+function providerMessage(message: string, apiKey = "") {
+  const detail = apiKey ? message.replaceAll(apiKey, "[clave]") : message;
+  if (/the file failed to be processed/i.test(detail))
+    return "Google no pudo procesar un archivo de esta generación. Si usas referencias, prueba a sustituirlas de una en una. El mensaje de Google no especifica cuál falló.";
+  return detail;
+}
+export class TerminalGenerationError extends Error {}
+class OutputFileError extends TerminalGenerationError {}
 export function errorMessage(error: unknown): string {
   if (error instanceof DOMException && error.name === "AbortError")
     return "Seguimiento pausado. Google puede continuar la generación; recupera el resultado sin crear otro vídeo.";
@@ -59,7 +67,7 @@ export function errorMessage(error: unknown): string {
   if (error instanceof TypeError)
     return "No se pudo conectar con Google. Comprueba tu conexión y recupera el resultado si ya se envió la solicitud.";
   return error instanceof Error
-    ? error.message
+    ? providerMessage(error.message)
     : "No se pudo completar la acción. Inténtalo de nuevo.";
 }
 async function request<T>(
@@ -77,10 +85,7 @@ async function request<T>(
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    const detail = String(body.error?.message || "").replaceAll(
-      apiKey,
-      "[clave]",
-    );
+    const detail = providerMessage(String(body.error?.message || ""), apiKey);
     const hints: Record<number, string> = {
       400: "Google rechazó la solicitud. Revisa la clave, el prompt y las referencias.",
       401: "La clave no es válida. Revísala en Ajustes.",
@@ -176,7 +181,12 @@ export function buildOmniPayload(
       ...(task.mode === "generate"
         ? { duration: `${task.settings.duration}s` }
         : {}),
-      delivery: "uri",
+      // Google recommends URI delivery for large outputs (>720p). Short 360p/
+      // 720p generations use direct delivery to avoid the extra Files pipeline.
+      ...(task.mode !== "generate" ||
+      ["1080p", "4k"].includes(task.settings.resolution)
+        ? { delivery: "uri" }
+        : {}),
     },
     background: true,
     store: true,
@@ -279,8 +289,8 @@ export async function downloadVideo(
       }>(`${BASE}/files/${file[1]}`, apiKey, { signal: pollingSignal });
       if (info.state === "ACTIVE") break;
       if (info.state === "FAILED")
-        throw new Error(
-          info.error?.message || "Google no pudo preparar el archivo de vídeo.",
+        throw new OutputFileError(
+          "Google no pudo preparar el archivo de vídeo generado. No se ha recuperado un vídeo descargable. Puedes reintentar el clip; esto enviará una nueva generación.",
         );
       if (info.state !== "PROCESSING")
         throw new Error(
@@ -329,7 +339,8 @@ export async function generateVideo(args: {
   onProgress: (text: string) => void;
   pollInterval?: number;
 }): Promise<{ blob: Blob; interactionId?: string }> {
-  const { apiKey, task, images, onProgress, onRemoteId } = args;
+  const { apiKey, task, onProgress, onRemoteId } = args;
+  let images = args.images;
   if (!apiKey.trim())
     throw new Error("Añade tu clave de Google en Ajustes para generar.");
   const signal = AbortSignal.any([
@@ -338,6 +349,16 @@ export async function generateVideo(args: {
   ]);
   signal.throwIfAborted();
   const interval = args.pollInterval ?? 5000;
+  if (!task.remoteId && images.length) {
+    // Validate before image decoding and before issuing any paid request.
+    (task.settings.model === OMNI_MODEL ? buildOmniPayload : buildVeoPayload)(
+      task,
+      images,
+    );
+    onProgress("Preparando imágenes de referencia…");
+    const { prepareReferenceImages } = await import("./referenceImages");
+    images = await prepareReferenceImages(images, signal);
+  }
   onProgress(task.remoteId ? "Recuperando generación…" : "Enviando a Google…");
   if (task.settings.model === OMNI_MODEL) {
     const endpoint = (id: string) =>
@@ -366,10 +387,17 @@ export async function generateVideo(args: {
       result.errors?.length ||
       (result.status && result.status !== "completed")
     )
-      throw new Error(
-        result.error?.message ||
-          result.errors?.map((e) => e.message).join(" ") ||
-          `La generación terminó con estado ${result.status}.`,
+      throw new (
+        result.status === "failed" || result.status === "cancelled"
+          ? TerminalGenerationError
+          : Error
+      )(
+        providerMessage(
+          result.error?.message ||
+            result.errors?.map((e) => e.message).join(" ") ||
+            `La generación terminó con estado ${result.status}.`,
+          apiKey,
+        ),
       );
     const content = modelOutput(result);
     const video =
@@ -390,10 +418,33 @@ export async function generateVideo(args: {
       );
     }
     onProgress("Guardando el vídeo…");
-    return {
-      blob: await downloadVideo(video, apiKey, signal),
-      interactionId: result.id,
-    };
+    let blob: Blob;
+    try {
+      blob = await downloadVideo(video, apiKey, signal);
+    } catch (error) {
+      if (!(error instanceof OutputFileError) || !result.id) throw error;
+      // Google documents that GET can return inline data even when URI delivery
+      // failed. Retrieve this interaction once; never repeat a paid POST.
+      onProgress("Recuperando el vídeo desde la solicitud original…");
+      const recovered = await request<Interaction>(
+        endpoint(result.id),
+        apiKey,
+        { signal },
+      );
+      const alternative =
+        modelOutput(recovered).findLast(
+          (part) => part.type === "video" && part.data,
+        ) || recovered.output_video;
+      if (
+        recovered.status !== "completed" ||
+        recovered.error ||
+        recovered.errors?.length ||
+        !alternative?.data
+      )
+        throw error;
+      blob = await downloadVideo(alternative, apiKey, signal);
+    }
+    return { blob, interactionId: result.id };
   }
   const endpoint = (name: string) => {
     if (

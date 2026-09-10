@@ -6,6 +6,7 @@ import {
   buildVeoPayload,
   errorMessage,
   generateVideo,
+  TerminalGenerationError,
   type ReferenceImage,
 } from "./google";
 import {
@@ -376,7 +377,15 @@ export function useWorkspace() {
         } catch (e) {
           const message = errorMessage(e);
           await patch(id, {
-            status: ctrl.signal.aborted || task?.remoteId ? "paused" : "failed",
+            status:
+              e instanceof TerminalGenerationError
+                ? "failed"
+                : ctrl.signal.aborted || task?.remoteId
+                  ? "paused"
+                  : "failed",
+            ...(e instanceof TerminalGenerationError
+              ? { task: undefined }
+              : {}),
             error: message,
           }).catch(() => undefined);
           notify(message, true);

@@ -21,7 +21,7 @@ const response = (body: unknown, status = 200) =>
   });
 afterEach(() => vi.unstubAllGlobals());
 describe("Omni integration", () => {
-  it("sends the official model, asynchronous URI delivery and duration", () => {
+  it("sends short generations directly and uses URI delivery for large outputs", () => {
     expect(buildOmniPayload(task, [])).toMatchObject({
       model: "gemini-omni-1.1-flash",
       input: task.prompt,
@@ -31,9 +31,30 @@ describe("Omni integration", () => {
         duration: "8s",
         aspect_ratio: "9:16",
         resolution: "720p",
-        delivery: "uri",
       },
     });
+  });
+  it("uses URI delivery for high resolutions and extensions", () => {
+    expect(
+      buildOmniPayload(
+        { ...task, settings: { ...task.settings, resolution: "4k" } },
+        [],
+      ).response_format.delivery,
+    ).toBe("uri");
+    expect(buildOmniPayload(task, []).response_format).not.toHaveProperty(
+      "delivery",
+    );
+    expect(
+      buildOmniPayload(
+        {
+          ...task,
+          mode: "extend",
+          previousInteractionId: "base",
+          previousDuration: 8,
+        },
+        [],
+      ).response_format.delivery,
+    ).toBe("uri");
   });
   it("binds first, last and reference image roles without changing MIME types", () => {
     const body = buildOmniPayload(task, [
@@ -385,5 +406,99 @@ describe("raw REST video responses", () => {
       "preparar el archivo",
     );
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("file processing failures", () => {
+  it("recovers a failed output file from the same interaction with GET only", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        response({
+          id: "op",
+          status: "completed",
+          output_video: { uri: "files/broken" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          state: "FAILED",
+          error: { message: "The file failed to be processed." },
+        }),
+      )
+      .mockResolvedValueOnce(
+        response({
+          id: "op",
+          status: "completed",
+          steps: [
+            {
+              type: "model_output",
+              content: [{ type: "video", data: btoa("recovered") }],
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const result = await generateVideo({
+      task: { ...task, remoteId: "op" },
+      images: [],
+      apiKey: "secret",
+      signal: new AbortController().signal,
+      onProgress: vi.fn(),
+      onRemoteId: vi.fn(),
+    });
+    expect(await result.blob.text()).toBe("recovered");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(
+      fetcher.mock.calls.every(
+        ([, init]) => !init.method || init.method === "GET",
+      ),
+    ).toBe(true);
+  });
+  it("does not loop or create another generation if no alternative output exists", async () => {
+    const completed = {
+      id: "op",
+      status: "completed",
+      output_video: { uri: "files/broken" },
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(completed))
+      .mockResolvedValueOnce(response({ state: "FAILED" }))
+      .mockResolvedValueOnce(response(completed));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(
+      generateVideo({
+        task: { ...task, remoteId: "op" },
+        images: [],
+        apiKey: "secret",
+        signal: new AbortController().signal,
+        onProgress: vi.fn(),
+        onRemoteId: vi.fn(),
+      }),
+    ).rejects.toThrow("archivo de vídeo generado");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+  it("reports a confirmed terminal file failure clearly without blaming a particular image", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        response({
+          id: "op",
+          status: "failed",
+          errors: [{ message: "The file failed to be processed." }],
+        }),
+      ),
+    );
+    await expect(
+      generateVideo({
+        task: { ...task, remoteId: "op" },
+        images: [],
+        apiKey: "secret",
+        signal: new AbortController().signal,
+        onProgress: vi.fn(),
+        onRemoteId: vi.fn(),
+      }),
+    ).rejects.toThrow("no especifica cuál falló");
   });
 });

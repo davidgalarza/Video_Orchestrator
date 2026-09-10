@@ -110,3 +110,9 @@ Si Chrome no está instalado en macOS, instala Chromium con `npx playwright inst
 ## Licencias
 
 La aplicación conserva la licencia MIT y la atribución del proyecto original en [LICENSE](./LICENSE). La distribución de FFmpeg incluida tiene su propia licencia GPL-2.0-or-later; consulta [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+
+### Errores al procesar archivos de Google
+
+Las generaciones nuevas en 360p y 720p usan entrega directa; 1080p, 4K y edición/extensión conservan entrega por URI para salidas grandes, siguiendo la [guía de Omni](https://ai.google.dev/gemini-api/docs/omni#retrieving-videos-with-an-uri). Si Google falla al preparar el archivo de salida, la app intenta recuperar datos del mismo resultado una sola vez mediante GET, sin repetir la generación. Un fallo terminal confirmado permite un reintento explícito; las interrupciones de red conservan la opción de recuperar. Un fallo de Google no garantiza que exista un vídeo recuperable.
+
+Antes de enviar referencias, la app prepara copias JPEG con orientación aplicada, fondo blanco para transparencias y un máximo de 2048 px por lado. Las imágenes originales y las solicitudes guardadas se conservan. Esta preparación mejora la compatibilidad de entrada, pero no corrige un fallo del servicio de archivos de salida de Google.

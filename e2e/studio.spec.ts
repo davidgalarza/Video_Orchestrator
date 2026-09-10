@@ -1817,3 +1817,77 @@ test("scaled ZIPs keep silent clips silent and record export resolution separate
     });
   }
 });
+
+test("reference generation sends a normalized copy and terminal failures permit an explicit retry", async ({
+  page,
+}) => {
+  const inputs: { type: string; mime_type?: string; data?: string }[][] = [];
+  await page.addInitScript(() =>
+    localStorage.setItem("vid_gen_api_key", "test-key"),
+  );
+  await page.route(google, (route) => {
+    const req = route.request();
+    if (req.method() === "POST") {
+      inputs.push(req.postDataJSON().input);
+      return route.fulfill({
+        json:
+          inputs.length === 1
+            ? {
+                id: "failed-ref",
+                status: "failed",
+                errors: [{ message: "The file failed to be processed." }],
+              }
+            : {
+                id: "retry-ref",
+                status: "completed",
+                output_video: { data: clip, mime_type: "video/mp4" },
+              },
+      });
+    }
+    return route.fulfill({
+      status: 500,
+      json: { error: { message: "Unexpected polling" } },
+    });
+  });
+  await page.goto("/");
+  await createProject(page);
+  await page.locator(".reference-details summary").click();
+  await page
+    .getByRole("button", { name: "Elegir fotograma inicial", exact: true })
+    .click();
+  await page
+    .getByLabel("Subir imágenes de referencia")
+    .setInputFiles("e2e/fixtures/reference.png");
+  await page
+    .getByRole("button", { name: "Usar fotograma inicial", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Generar escena", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Reintentar clip", exact: true }),
+  ).toBeVisible();
+  expect(inputs).toHaveLength(1);
+  const image = inputs[0].find((part) => part.type === "image")!;
+  expect(image.mime_type).toBe("image/jpeg");
+  expect(Buffer.from(image.data!, "base64").subarray(0, 3)).toEqual(
+    Buffer.from([255, 216, 255]),
+  );
+  await page
+    .getByRole("button", { name: "Reintentar clip", exact: true })
+    .click();
+  await expect(page.locator(".clip-title [role=status]")).toHaveText("Listo");
+  expect(inputs).toHaveLength(2);
+  await page
+    .getByRole("button", { name: "Abrir clip: Primera escena", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Nuevo clip", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("button", { name: "Elegir fotograma inicial", exact: true })
+      .locator("img"),
+  ).toHaveAttribute("src", /^data:image\/png;base64,/);
+});
