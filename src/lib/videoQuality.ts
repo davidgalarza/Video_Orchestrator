@@ -33,7 +33,13 @@ export function qualityFilename(name: string, resolution: DownloadResolution) {
     ? name
     : `${name.replace(/\.mp4$/i, "")}-${resolution}.mp4`;
 }
+export interface VideoSegment {
+  start: number;
+  end: number;
+  volume: number;
+}
 export interface VideoProcessingOptions {
+  segments?: VideoSegment[];
   signal?: AbortSignal;
   onProgress?: (progress: { text: string; fraction?: number }) => void;
 }

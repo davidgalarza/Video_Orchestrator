@@ -36,7 +36,11 @@ La alternativa de restauración [Real-ESRGAN](https://github.com/xinntao/Real-ES
 
 Selecciona exactamente dos clips con vídeo y pulsa **Comparar 2 clips**. Ambos comparten reproducción y desplazamiento; puedes escuchar uno a la vez y marcar el favorito sin salir. Si las duraciones difieren, el más corto conserva su último fotograma mientras continúa el otro.
 
-Para un montaje rápido, selecciona clips y pulsa **Añadir a secuencia**. Ordena las tomas con las flechas, usa **Quitar de secuencia** para excluirlas y **Exportar vídeo** para unirlas. **Todos los clips** vuelve a la biblioteca. El orden del montaje se guarda aparte; los proyectos antiguos conservan su secuencia original.
+**Montar secuencia** abre un editor con biblioteca, previsualización y línea de tiempo. Añade vídeos con **+** o arrástralos desde la biblioteca; puedes usar un mismo vídeo varias veces. Arrastra las tomas para ordenarlas, o usa **Antes / Después**. Recorta ambos bordes en la línea de tiempo o introduce los segundos de inicio y final. **Dividir aquí** corta en la posición del cursor; **Duplicar**, **Quitar**, **Deshacer** y **Rehacer** permiten probar montajes sin tocar los originales.
+
+El cursor, la regla y el control bajo la previsualización recorren la secuencia sin tener que exportarla. La reproducción pasa entre tomas y respeta sus recortes y volumen; el siguiente clip se precarga. **Espacio** reproduce/pausa, **← / →** avanzan un fotograma (24 fps), **Mayús + flecha** avanza un segundo y **S** divide. También puedes ajustar el zoom y elegir formato vertical u horizontal; las imágenes se encajan completas con bandas cuando su proporción difiere.
+
+Los cambios se guardan automáticamente en este navegador, incluyendo recortes, repeticiones, audio y versión de origen. **Exportar vídeo** aplica esos mismos ajustes al MP4, incluso con una sola toma recortada. Los proyectos anteriores conservan su orden al abrirse. Es un montaje de una pista con cortes directos; las transiciones, los títulos y las pistas de música independientes quedan para el editor local.
 
 En el modal, escribe el prompt y ajusta la salida; las referencias son opcionales y se despliegan cuando las necesitas. Las instrucciones de edición y extensión también se guardan. Puedes preparar otro clip mientras se genera uno y volver desde Ajustes al clip abierto. En móvil, alterna entre **Configurar** y **Vista previa**. En la biblioteca puedes ordenar, filtrar los clips **Por revisar** y recuperar resultados pendientes directamente.
 

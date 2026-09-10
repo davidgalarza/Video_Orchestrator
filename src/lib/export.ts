@@ -15,7 +15,23 @@ export async function stitchVideos(
   options: VideoProcessingOptions = {},
 ): Promise<Blob> {
   if (!blobs.length) throw new Error("No hay clips que exportar.");
-  if (blobs.length === 1) return resizeVideo(blobs[0], resolution, options);
+  if (
+    options.segments &&
+    (options.segments.length !== blobs.length ||
+      options.segments.some(
+        (s) =>
+          !Number.isFinite(s.start) ||
+          s.start < 0 ||
+          !Number.isFinite(s.end) ||
+          s.end <= s.start ||
+          !Number.isFinite(s.volume) ||
+          s.volume < 0 ||
+          s.volume > 1,
+      ))
+  )
+    throw new Error("Los recortes del montaje no son válidos.");
+  if (blobs.length === 1 && !options.segments)
+    return resizeVideo(blobs[0], resolution, options);
   return withVideoEngine(options, async (ffmpeg) => {
     const files: string[] = [];
     try {
@@ -60,7 +76,9 @@ export async function stitchVideos(
         const hasAudio = info.streams.some(
           (stream) => stream.codec_type === "audio",
         );
+        const segment = options.segments?.[i];
         const code = await ffmpeg.exec([
+          ...(segment ? ["-ss", String(segment.start)] : []),
           "-i",
           input,
           ...(!hasAudio
@@ -77,6 +95,14 @@ export async function stitchVideos(
           hasAudio ? "0:a:0" : "1:a:0",
           "-vf",
           `scale=${width}:${height}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24`,
+          ...(segment
+            ? [
+                "-t",
+                String(segment.end - segment.start),
+                "-af",
+                `volume=${segment.volume}`,
+              ]
+            : []),
           "-c:v",
           "libx264",
           "-preset",

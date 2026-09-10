@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   Check,
   Copy,
   Trash2,
@@ -31,6 +30,7 @@ import { getDefaults } from "../lib/settings";
 import { downloadBlob } from "../lib/media";
 import { clipFilename } from "../lib/archive";
 import { Clip, Empty, IconButton } from "./common";
+import { SequenceEditor } from "./SequenceEditor";
 import { Editor } from "./Editor";
 import { VideoDownloadDialog } from "./VideoDownloadDialog";
 import { DownloadDialog } from "./DownloadDialog";
@@ -144,6 +144,7 @@ export function ProjectWorkspace({
           ...selected.map((s) => s.id),
         ]),
       ]);
+      await w.refresh();
       setSelection([]);
       setView("sequence");
     });
@@ -164,23 +165,12 @@ export function ProjectWorkspace({
   };
   if (view === "sequence")
     return (
-      <>
-        <div className="workspace-navigation">
-          <button className="text-button" onClick={() => setView("clips")}>
-            <ArrowLeft size={16} /> Todos los clips
-          </button>
-          <span>Montaje de secuencia</span>
-        </div>
-        <Editor
-          key={`${view}-${editing}`}
-          project={project}
-          workspace={w}
-          settings={() => settings()}
-          initialSceneId={editing}
-          sequenceMode={view === "sequence"}
-          browseClips={() => setView("clips")}
-        />
-      </>
+      <SequenceEditor
+        key={project.id}
+        project={project}
+        workspace={w}
+        onBack={() => setView("clips")}
+      />
     );
   return (
     <div className="project-clips">
@@ -218,7 +208,7 @@ export function ProjectWorkspace({
           >
             <Layers size={15} />
             {sequence.length
-              ? `Secuencia · ${sequence.length}`
+              ? `Secuencia · ${project.sequence_items?.length ?? sequence.length}`
               : "Montar secuencia"}
           </button>
           <button

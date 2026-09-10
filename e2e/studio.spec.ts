@@ -376,7 +376,7 @@ test("exports mixed silent/audio clips in a single playable MP4 using the local 
   await page
     .getByRole("button", { name: "Añadir a secuencia", exact: true })
     .click();
-  await expect(page.locator(".preview-frame video")).toBeVisible();
+  await expect(page.getByTestId("sequence-preview")).toBeVisible();
   const downloaded = page.waitForEvent("download");
   await page
     .getByRole("button", { name: "Exportar vídeo", exact: true })
@@ -524,19 +524,33 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
   await page
     .getByRole("button", { name: "Añadir a secuencia", exact: true })
     .click();
-  await expect(page.locator(".scene-card")).toHaveCount(2);
-  await page.locator(".scene-card").last().click();
+  await expect(page.getByTestId("timeline-clip")).toHaveCount(2);
   await page
-    .getByRole("button", { name: "Mover escena a la izquierda", exact: true })
+    .getByTestId("timeline-clip")
+    .last()
+    .locator(".sequence-item-content")
     .click();
-  await expect(page.locator(".scene-card").first()).toContainText("Escena 2");
+  await page.getByRole("button", { name: "Antes", exact: true }).click();
+  await expect(page.getByTestId("timeline-clip").first()).toContainText(
+    "Escena 2",
+  );
+  await expect(page.locator(".sequence-header [role=status]")).toHaveText(
+    "Guardado",
+  );
   await page.reload();
   await page.getByLabel("Ordenar clips").selectOption("order");
   await expect(page.locator(".project-clip")).toHaveCount(3);
   await page
     .getByRole("button", { name: "Secuencia · 2", exact: true })
     .click();
-  await expect(page.locator(".scene-card").first()).toContainText("Escena 2");
+  await expect(page.getByTestId("timeline-clip").first()).toContainText(
+    "Escena 2",
+  );
+  await page
+    .getByTestId("timeline-clip")
+    .first()
+    .locator(".sequence-item-content")
+    .click();
   await page.screenshot({
     path: "artifacts/sequence-desktop.png",
     fullPage: true,
@@ -553,9 +567,12 @@ test("clip library downloads originals in ZIP and keeps an optional sequence aft
   ).toBe(true);
 
   await page
-    .getByRole("button", { name: "Quitar de secuencia", exact: true })
+    .getByTestId("timeline-clip")
+    .first()
+    .locator(".sequence-item-content")
     .click();
-  await expect(page.locator(".scene-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "Quitar", exact: true }).click();
+  await expect(page.getByTestId("timeline-clip")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Todos los clips", exact: true })
     .click();
@@ -1890,4 +1907,160 @@ test("reference generation sends a normalized copy and terminal failures permit 
       .getByRole("button", { name: "Elegir fotograma inicial", exact: true })
       .locator("img"),
   ).toHaveAttribute("src", /^data:image\/png;base64,/);
+});
+
+test("timeline trims, splits, reorders, previews cuts and exports the saved montage", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route(google, (route) => route.abort());
+  await page.goto("/");
+  await seedReviewClips(page);
+  await page.getByLabel("Ordenar clips").selectOption("order");
+  await page.getByLabel("Seleccionar clips visibles", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Añadir a secuencia", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Reproducir secuencia", exact: true }),
+  ).toBeEnabled();
+  const cards = page.getByTestId("timeline-clip");
+  await cards.first().locator(".sequence-item-content").click();
+  await page.getByLabel("Inicio del recorte", { exact: true }).fill("0.25");
+  await page.getByLabel("Final del recorte", { exact: true }).click();
+  await page.getByLabel("Final del recorte", { exact: true }).fill("0.75");
+  await page.getByRole("heading", { name: "Original", exact: true }).click();
+  await expect(page.locator(".sequence-duration")).toContainText("00:00:12");
+  await page
+    .getByRole("button", { name: "Silenciar clip", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("sequence-preview")
+        .evaluate((v: HTMLVideoElement) => v.currentTime),
+    )
+    .toBeCloseTo(0.25, 1);
+  // Split a trimmed clip at timeline .25 => source .50. Both halves retain mute.
+  await page.getByLabel("Recorrer secuencia", { exact: true }).fill("0.25");
+  await page.getByRole("button", { name: "Dividir aquí", exact: true }).click();
+  await expect(cards).toHaveCount(3);
+  await expect(cards.first()).toContainText("Sin audio");
+  await expect(cards.nth(1)).toContainText("Sin audio");
+  await page.getByRole("button", { name: "Deshacer", exact: true }).click();
+  await expect(cards).toHaveCount(2);
+  await page.getByRole("button", { name: "Rehacer", exact: true }).click();
+  await expect(cards).toHaveCount(3);
+  await cards.last().dragTo(cards.first());
+  await expect(cards.first()).toContainText("Editado");
+  await cards.last().locator(".sequence-item-content").click();
+  await page.getByRole("button", { name: "Duplicar", exact: true }).click();
+  await expect(cards).toHaveCount(4);
+  await page.getByRole("button", { name: "Quitar", exact: true }).click();
+  await expect(cards).toHaveCount(3);
+  // Trim the first source by dragging its right handle: one second -> half a second.
+  const handle = page.getByRole("button", {
+    name: "Recortar final de toma 1",
+    exact: true,
+  });
+  const bounds = (await handle.boundingBox())!;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 - 36, bounds.y + 20, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect(
+    page.getByLabel("Final del recorte", { exact: true }),
+  ).toHaveValue("0.5");
+  await page.getByLabel("Formato del montaje").selectOption("16:9");
+  const frame = (await page.locator(".sequence-preview-frame").boundingBox())!;
+  expect(frame.width / frame.height).toBeCloseTo(16 / 9, 2);
+  await page.getByLabel("Recorrer secuencia", { exact: true }).fill("0.625");
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("sequence-preview")
+        .evaluate((v: HTMLVideoElement) => v.currentTime),
+    )
+    .toBeCloseTo(0.375, 1);
+  await expect
+    .poll(() =>
+      page
+        .getByTestId("sequence-preview")
+        .evaluate((v: HTMLVideoElement) => v.volume),
+    )
+    .toBe(0);
+  await page
+    .getByRole("button", { name: "Volver al inicio", exact: true })
+    .click();
+  await cards.first().locator(".sequence-item-content").click();
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByRole("button", { name: "Reproducir secuencia", exact: true }),
+  ).toBeVisible({ timeout: 10000 });
+  await expect(
+    page.getByLabel("Posición del montaje", { exact: true }),
+  ).toContainText("00:01:00 / 00:01:00");
+  await expect(page.locator(".sequence-header [role=status]")).toHaveText(
+    "Guardado",
+  );
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Secuencia · 3", exact: true })
+    .click();
+  await expect(cards).toHaveCount(3);
+  await expect(cards.first()).toContainText("Editado");
+  await expect(page.getByLabel("Formato del montaje")).toHaveValue("16:9");
+  const downloaded = page.waitForEvent("download", { timeout: 90000 });
+  await page
+    .getByRole("button", { name: "Exportar vídeo", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Descargar MP4", exact: true })
+    .click();
+  const file = await downloaded;
+  const info = await inspectVideoDownload(
+    page,
+    readFileSync((await file.path())!),
+  );
+  expect(info.width).toBe(1280);
+  expect(info.height).toBe(720);
+  expect(info.duration).toBeGreaterThan(0.95);
+  expect(info.duration).toBeLessThan(1.2);
+  // A montage with just one trimmed take must still apply the cut and framing.
+  for (let i = 0; i < 2; i++) {
+    await cards.last().locator(".sequence-item-content").click();
+    await page.getByRole("button", { name: "Quitar", exact: true }).click();
+  }
+  await expect(cards).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Añadir Original al montaje", exact: true })
+    .click();
+  await expect(cards).toHaveCount(2);
+  await page.getByRole("button", { name: "Deshacer", exact: true }).click();
+  await expect(cards).toHaveCount(1);
+  const singleDownloaded = page.waitForEvent("download", { timeout: 90000 });
+  await page
+    .getByRole("button", { name: "Exportar vídeo", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Descargar MP4", exact: true })
+    .click();
+  const singleFile = await singleDownloaded;
+  const singleInfo = await inspectVideoDownload(
+    page,
+    readFileSync((await singleFile.path())!),
+  );
+  expect(singleInfo.width).toBe(1280);
+  expect(singleInfo.height).toBe(720);
+  expect(singleInfo.duration).toBeGreaterThan(0.45);
+  expect(singleInfo.duration).toBeLessThan(0.7);
+  await page
+    .getByRole("button", { name: "Todos los clips", exact: true })
+    .click();
+  await expect(page.locator(".project-clip")).toHaveCount(2);
+  expect(errors).toEqual([]);
 });

@@ -16,12 +16,22 @@ export const DEFAULT_VIDEO: VideoSettings = {
   resolution: "720p",
   duration: 8,
 };
+export interface SequenceItem {
+  id: string;
+  scene_id: string;
+  version_id?: string;
+  in: number;
+  out?: number;
+  volume: number;
+}
 export interface Project {
   id: string;
   name: string;
   created_at: string;
   updated_at?: string;
   sequence_ids?: string[];
+  sequence_items?: SequenceItem[];
+  sequence_aspect?: AspectRatio;
 }
 export function sequenceScenes(project: Project, scenes: Scene[]): Scene[] {
   const own = scenes.filter((s) => s.project_id === project.id);
@@ -86,6 +96,7 @@ export interface Scene {
   extend_prompt?: string;
   deleted_at?: string;
   deleted_sequence_index?: number;
+  deleted_sequence_items?: { index: number; item: SequenceItem }[];
   status: "pending" | "processing" | "completed" | "failed" | "paused";
   settings?: VideoSettings;
   first_frame_asset_id?: string;

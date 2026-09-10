@@ -1,10 +1,13 @@
 import { openDB, type DBSchema } from "idb";
+import { makeSequenceItem } from "./timeline";
 import {
   sceneSettings,
   sequenceScenes,
   activeVersion,
   sceneBlob,
   type Project,
+  type SequenceItem,
+  type AspectRatio,
   type Scene,
   type Asset,
   type ClipVersion,
@@ -379,11 +382,17 @@ export async function deleteScene(id: string) {
       deleted_at: now(),
       generation_queue: [],
       deleted_sequence_index: sequence.indexOf(id),
+      deleted_sequence_items: project?.sequence_items?.flatMap((item, index) =>
+        item.scene_id === id ? [{ item, index }] : [],
+      ),
     });
     if (project)
       await tx.objectStore("projects").put({
         ...project,
         sequence_ids: sequence.filter((item) => item !== id),
+        sequence_items: project.sequence_items?.filter(
+          (item) => item.scene_id !== id,
+        ),
         updated_at: now(),
       });
   }
@@ -403,15 +412,32 @@ export async function restoreScene(id: string) {
         0,
         id,
       );
+    const restoredItems = project.sequence_items
+      ? [...project.sequence_items]
+      : undefined;
+    if (restoredItems)
+      for (const entry of scene.deleted_sequence_items || [])
+        if (!restoredItems.some((item) => item.id === entry.item.id))
+          restoredItems.splice(
+            Math.min(entry.index, restoredItems.length),
+            0,
+            entry.item,
+          );
     await tx.objectStore("scenes").put({
       ...scene,
+      deleted_sequence_items: undefined,
       deleted_at: undefined,
       deleted_sequence_index: undefined,
       updated_at: now(),
     });
     await tx
       .objectStore("projects")
-      .put({ ...project, sequence_ids: sequence, updated_at: now() });
+      .put({
+        ...project,
+        sequence_ids: sequence,
+        sequence_items: restoredItems,
+        updated_at: now(),
+      });
   }
   await tx.done;
 }
@@ -433,7 +459,66 @@ export async function saveSequence(projectId: string, ids: string[]) {
     );
   await tx
     .objectStore("projects")
-    .put({ ...project, sequence_ids: ids, updated_at: now() });
+    .put({
+      ...project,
+      sequence_ids: ids,
+      sequence_items: project.sequence_items
+        ? [
+            ...project.sequence_items.filter((item) =>
+              ids.includes(item.scene_id),
+            ),
+            ...ids
+              .filter(
+                (id) =>
+                  !project.sequence_items!.some((item) => item.scene_id === id),
+              )
+              .map((id) => makeSequenceItem(scenes.find((s) => s.id === id)!)),
+          ]
+        : undefined,
+      updated_at: now(),
+    });
+  await tx.done;
+}
+export async function saveMontage(
+  projectId: string,
+  items: SequenceItem[],
+  aspect: AspectRatio,
+) {
+  const db = await connection;
+  const tx = db.transaction(["projects", "scenes"], "readwrite");
+  const project = await tx.objectStore("projects").get(projectId);
+  const scenes = await tx
+    .objectStore("scenes")
+    .index("by-project")
+    .getAll(projectId);
+  if (
+    !project ||
+    !["9:16", "16:9"].includes(aspect) ||
+    new Set(items.map((i) => i.id)).size !== items.length ||
+    items.some(
+      (item) =>
+        !scenes.some((s) => s.id === item.scene_id && !s.deleted_at) ||
+        !Number.isFinite(item.in) ||
+        item.in < 0 ||
+        (item.out !== undefined &&
+          (!Number.isFinite(item.out) || item.out <= item.in)) ||
+        !Number.isFinite(item.volume) ||
+        item.volume < 0 ||
+        item.volume > 1,
+    )
+  )
+    throw new Error(
+      "El montaje contiene un clip no disponible o un recorte no válido. Vuelve a abrir la secuencia.",
+    );
+  await tx
+    .objectStore("projects")
+    .put({
+      ...project,
+      sequence_items: items,
+      sequence_ids: [...new Set(items.map((item) => item.scene_id))],
+      sequence_aspect: aspect,
+      updated_at: now(),
+    });
   await tx.done;
 }
 export async function renameProject(id: string, name: string) {

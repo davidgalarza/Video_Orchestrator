@@ -444,3 +444,41 @@ describe("review and queue preferences", () => {
     ).toHaveLength(0);
   });
 });
+
+it("persists independent trims and restores every occurrence after trash, without regrouping when adding clips", async () => {
+  const p = await db.createProject(
+    "Montage",
+    [
+      { title: "A", prompt: "a" },
+      { title: "B", prompt: "b" },
+      { title: "C", prompt: "c" },
+    ],
+    DEFAULT_VIDEO,
+  );
+  const [a, b, c] = (await db.readWorkspace()).scenes.filter(
+    (s) => s.project_id === p.id,
+  );
+  const items = [
+    { id: "a1", scene_id: a.id, in: 1, out: 3, volume: 0 },
+    { id: "b1", scene_id: b.id, in: 0, out: 2, volume: 1 },
+    { id: "a2", scene_id: a.id, in: 4, out: 6, volume: 0.5 },
+  ];
+  await db.saveMontage(p.id, items, "16:9");
+  await db.saveSequence(p.id, [a.id, b.id, c.id]);
+  let saved = (await db.readWorkspace()).projects.find((x) => x.id === p.id)!;
+  expect(saved.sequence_items?.slice(0, 3)).toEqual(items);
+  await db.deleteScene(a.id);
+  saved = (await db.readWorkspace()).projects.find((x) => x.id === p.id)!;
+  expect(saved.sequence_items?.map((i) => i.scene_id)).toEqual([b.id, c.id]);
+  await db.restoreScene(a.id);
+  saved = (await db.readWorkspace()).projects.find((x) => x.id === p.id)!;
+  expect(saved.sequence_items?.slice(0, 3)).toEqual(items);
+  expect(saved.sequence_aspect).toBe("16:9");
+  await expect(
+    db.saveMontage(p.id, [{ ...items[0], out: 0.1 }], "9:16"),
+  ).rejects.toThrow("recorte");
+  expect(
+    (await db.readWorkspace()).projects.find((x) => x.id === p.id)
+      ?.sequence_items,
+  ).toEqual(saved.sequence_items);
+});

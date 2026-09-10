@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { AspectRatio } from "../types";
 import { downloadBlob } from "../lib/media";
-import { qualityFilename, type DownloadResolution } from "../lib/videoQuality";
+import {
+  qualityFilename,
+  type VideoSegment,
+  type DownloadResolution,
+} from "../lib/videoQuality";
 import { StudioDialog } from "./StudioDialog";
 import { DownloadProgress, DownloadQuality } from "./DownloadQuality";
 export interface VideoDownload {
   blobs: Blob[];
+  segments?: VideoSegment[];
   filename: string;
   title: string;
   aspect?: AspectRatio;
@@ -49,7 +54,11 @@ export function VideoDownloadDialog({
       let output = blob;
       if (sequence || resolution !== "original") {
         const { resizeVideo, stitchVideos } = await import("../lib/export");
-        const options = { signal: task.signal, onProgress: setProgress };
+        const options = {
+          signal: task.signal,
+          onProgress: setProgress,
+          segments: video.segments,
+        };
         output = sequence
           ? await stitchVideos(video.blobs, video.aspect!, resolution, options)
           : await resizeVideo(blob, resolution, options);
